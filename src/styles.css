@@ -73,3 +73,11 @@
 .tree-context-actions button{display:inline-flex;align-items:center;gap:5px;border:1px solid #c6e6d4;border-radius:5px;padding:6px 8px;background:#f5fcf7;color:#087849;font-size:11px;white-space:nowrap}
 .tree-context-actions button:hover,.tree-context-actions button:focus-visible{background:#dcf6e7;border-color:#00a45e}
 @media(max-width:800px){.tree-context-actions{margin-left:calc(20px + var(--tree-depth,0)*11px)}}
+
+/* Draft persistence / governance publishing */
+.github-publish-panel { margin: 16px 0; padding: 18px; border: 1px solid #d2e7dc; background: #f7fcf9; border-radius: 12px; display: grid; gap: 10px; }
+.github-publish-panel p { margin: 6px 0; }
+.github-publish-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.github-publish-controls input { flex: 1 1 260px; min-width: 180px; border: 1px solid #bdd0c6; border-radius: 8px; padding: 10px 12px; }
+.github-publish-controls button { white-space: nowrap; }
+.github-publish-panel a { color: #08764a; text-decoration: underline; }
