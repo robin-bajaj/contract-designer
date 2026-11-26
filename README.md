@@ -25,7 +25,7 @@ Open the local URL printed by Vite (usually `http://localhost:5173`).
 
 The project supports the repository's logical contract YAML shapes: `name`, integer `version`, `attributes`, `metrics`, and child `uses/include`. It intentionally avoids treating generic dbt model `contract.enforced` as equivalent to this logical CDO contract format.
 
-Contract definitions and edits live **in browser memory** only: reload resets to the embedded examples. Canvas card positions are saved separately in browser localStorage and can be reset from the canvas toolbar; the layout never modifies contract YAML. Use **Export YAML** to save each edited file. No direct GitHub write, authentication, autosave, repository connection, or backend validation is included. Local validation is only a preflight: the existing Python `contract_registry` validator and federated CI remain authoritative. The UI's standalone metric editor currently supports simple SUM/COUNT metrics over named attributes. For existing sophisticated definitions, avoid overwriting unsupported fields without a round-trip fidelity test.
+Contract definitions and edits are **automatically saved to browser localStorage**, and restored when the page is refreshed in the same browser/profile. Canvas card positions are saved separately in browser localStorage and can be reset from the canvas toolbar; the layout never modifies contract YAML. Use **Export YAML** for a portable backup. A GitHub PR publishing action is available with a user-provided fine-grained access token (in page memory only; never stored). No server-side OAuth or backend validation is included. Local validation is only a preflight: the existing Python `contract_registry` validator and federated CI remain authoritative. The UI's standalone metric editor currently supports simple SUM/COUNT metrics over named attributes. For existing sophisticated definitions, avoid overwriting unsupported fields without a round-trip fidelity test.
 
 Import the YAML files from `cdo-semantic-governance/contracts/` to edit. Keep filenames such as `cdo_position_v1.yml`; export filenames are now `cdo.position.yml`, `cdo.all.yml`, etc., matching the logical contract name requested in the UI. **The existing governance registry uses filenames such as `cdo_position_v1.yml`**; rename downloaded files to that registry convention before adding them to the governance repository, then raise PRs for review. Do not commit changes to published contract versions in place unless your governance process permits it; prefer a new version.
 
@@ -61,7 +61,7 @@ The layout tests use Node's built-in test runner. The build requires installed n
 
 The sidebar nests child contracts beneath the exact versioned parent referenced in their `uses` metadata. Expand/collapse using the chevron, and use the + icon beside a parent to create a child of that contract. Searching keeps ancestor nodes visible for context. Missing-parent drafts appear as roots rather than vanishing. Selecting a contract opens its editor with a **live YAML preview** beneath contract details; choose **View YAML** to scroll to it or **Download .yml** to export its exact contract name. Preview and export use the same `toContractDocument` serializer.
 
-These changes do not add automatic contract persistence or GitHub publishing. Changes remain browser-memory drafts until YAML export.
+Draft edits are automatically persisted to browser localStorage. Publishing to the governance repository creates a pull request without modifying main.
 
 ## dbt-oriented editor controls
 
@@ -72,3 +72,13 @@ Metric descriptions are edited inline, and the Fill Nulls field is no longer sho
 ## Canvas-first creation workflow
 
 Creation is contextual rather than driven by permanent plus buttons. **Right-click blank canvas space** and choose **Create Standalone Contract**. **Right-click a standalone contract node** to choose **View Contract** or **Create Child Contract** linked to that parent. Child nodes also show contract actions on right-click. Standalone contracts in the sidebar also offer View/Create Child when selected. **Left-dragging** empty space pans; left-dragging a node repositions it. Left-click alone does not open menus or create contracts. The sidebar-wide +Standalone/+Child and header New Contract buttons have been removed. Press Escape to dismiss a canvas menu. Keyboard users can open the context menu using Shift+F10 or the Context Menu key when focused on the canvas or node. The `uses: {name,version}` relation is set when a child is created, with YAML schema unchanged.
+
+## Saved drafts and GitHub PR publishing
+
+Drafts are automatically saved to `localStorage` under `contract-designer.contracts.v1`, including imported, new, edited and deleted contracts. Refresh restores them; 'Reset samples' prompts for confirmation and replaces saved drafts. Drafts are per-browser/profile and may be deleted if site data is cleared. Export YAML for portable backups. Canvas positions are stored separately.
+
+To publish a **new contract version**, enter a fine-grained GitHub token into the editor's Save to GitHub panel. Grant **Contents: Read and Write** and **Pull requests: Read and Write** on `robin-bajaj/cdo-semantic-governance`. The browser uses the GitHub REST API to check the target filename on `main`, create a feature branch, commit the YAML to `contracts/<name_with_underscores>_v<version>.yml`, and open a PR targeting `main`. Existing version files are deliberately blocked to protect published contracts. The token is held only in React state until refresh, not stored or copied into any URL. A network failure after branch creation may leave a branch without a PR and must be handled manually.
+
+Local structural checks run before publishing; the governance repo's Python contract validator/CI and human review remain authoritative. Browser-side token usage is appropriate only for a trusted local deployment; for multi-user/production use, replace it with a server-side GitHub App/OAuth flow with short-lived scoped credentials. Browser network restrictions or repository CORS settings can prevent API requests.
+
+Run `npm test` and `npm run build` after pulling the changes.
