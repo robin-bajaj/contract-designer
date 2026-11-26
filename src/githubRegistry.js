@@ -25,36 +25,34 @@ export function parseRegistryContract(source) {
   }
 }
 
-/** Only completed, merged files on main are imported. Pending PRs are excluded. */
+/** Read only files committed to governance main. A CDN fallback handles GitHub REST throttling. */
 export async function fetchGovernanceContracts(fetchImpl = fetch, token = '') {
   const headers = { Accept: 'application/vnd.github+json' }
   if (token?.trim()) headers.Authorization = `Bearer ${token.trim()}`
   const prefix = `https://api.github.com/repos/${GOVERNANCE_REPO}`
-  const listResponse = await fetchImpl(`${prefix}/contents/contracts?ref=main`, { headers })
-  if (!listResponse.ok) throw Error(`GitHub registry listing failed (HTTP ${listResponse.status})`)
-  const files = await listResponse.json()
-  if (!Array.isArray(files)) throw Error('Unexpected GitHub registry response')
-  const entries = files.filter(f => f.type === 'file' && /\.ya?ml$/i.test(f.name))
-  if (!entries.length) throw Error('No YAML contracts found in governance repository')
-  const contracts = await Promise.all(entries.map(async file => {
-    // Use the GitHub contents API rather than trusting an arbitrary download URL.
-    const response = await fetchImpl(`${prefix}/contents/${encodeURIComponent(file.name)}?ref=main`, {
-      headers: { ...headers, Accept: 'application/vnd.github.raw+json' },
-    })
-    if (!response.ok) throw Error(`Unable to read ${file.name} (HTTP ${response.status})`)
-    let body = await response.text()
-    // Some API gateways return JSON instead of honoring the raw Accept header.
-    if (body.trim().startsWith('{')) {
-      try {
-        const maybe = JSON.parse(body)
-        if (maybe.encoding === 'base64' && typeof maybe.content === 'string') {
-          const binary = atob(maybe.content.replace(/\s/g, ''))
-          body = new TextDecoder().decode(Uint8Array.from(binary, c => c.charCodeAt(0)))
-        }
-      } catch { /* raw YAML may be JSON-looking; parser below validates */ }
+  let entries = []
+  const listing = await fetchImpl(`${prefix}/contents/contracts?ref=main`, { headers })
+  if (listing.ok) {
+    const files = await listing.json()
+    if (!Array.isArray(files)) throw Error('Invalid GitHub registry listing')
+    entries = files.filter(f => f.type === 'file' && /\.ya?ml$/i.test(f.name)).map(f => f.name)
+  } else if (listing.status === 403 || listing.status === 429) {
+    // Public CDN metadata is separate from api.github.com rate limits.
+    const fallback = await fetchImpl(`https://data.jsdelivr.com/v1/package/gh/${GOVERNANCE_REPO}@main/flat`)
+    if (!fallback.ok) throw Error(`Registry listing limited (GitHub HTTP ${listing.status}, CDN HTTP ${fallback.status}). Try again later.`)
+    const result = await fallback.json()
+    entries = (result.files || []).map(f => f.name).filter(name => /^\/contracts\/[^/]+\.ya?ml$/i.test(name)).map(name => name.split('/').pop())
+  } else throw Error(`GitHub registry listing failed (HTTP ${listing.status})`)
+  if (!entries.length) throw Error('No YAML contracts found in the governance registry')
+  const contracts = await Promise.all(entries.map(async name => {
+    // Public raw content avoids one GitHub REST request per contract.
+    const rawUrl = `https://raw.githubusercontent.com/${GOVERNANCE_REPO}/main/contracts/${encodeURIComponent(name)}`
+    let response = await fetchImpl(rawUrl)
+    if (!response.ok) {
+      response = await fetchImpl(`https://cdn.jsdelivr.net/gh/${GOVERNANCE_REPO}@main/contracts/${encodeURIComponent(name)}`)
     }
-    const contract = parseRegistryContract(body)
-    return contract
+    if (!response.ok) throw Error(`Unable to read ${name} (HTTP ${response.status})`)
+    return parseRegistryContract(await response.text())
   }))
   if (new Set(contracts.map(contractKey)).size !== contracts.length) throw Error('Duplicate contract name/version in GitHub registry')
   return contracts
