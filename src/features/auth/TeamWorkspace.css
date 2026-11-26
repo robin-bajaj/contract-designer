@@ -1,0 +1,44 @@
+.team-dashboard{max-width:1300px;margin:0 auto;padding:32px 30px 70px}
+.team-dashboard-title{display:flex;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap}
+.team-dashboard-title h1{font-size:26px;color:#008f54;margin:6px 0 8px}
+.team-dashboard-title p{font-size:13px;color:#788a7f;margin:0}
+.team-dashboard-title button:disabled{opacity:.65;cursor:wait}
+.team-label{font-size:11px;letter-spacing:.09em;font-weight:750;color:#658371;text-transform:uppercase}
+.team-repository-line{display:flex;gap:10px;align-items:center;color:#5b7765;font-size:12px;margin:25px 0;background:#eaf6ee;border:1px solid #d3e8db;padding:12px 15px;border-radius:7px}
+.team-loading,.team-empty{padding:36px;border:1px solid #dbe8de;background:#fff;border-radius:8px;color:#5b7465;text-align:center}
+.team-error{display:flex;align-items:center;gap:9px;padding:14px 17px;background:#fff4ed;border:1px solid #f0cdbd;color:#904629;border-radius:8px;font-size:13px;margin:14px 0}
+.team-error button{border:1px solid #cd8a71;border-radius:5px;background:white;color:#904629;padding:6px 11px;margin-left:auto}
+.team-model-picker{background:white;border:1px solid #dce9e1;border-radius:10px;padding:16px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:18px}
+.team-model-picker label{font-weight:700;font-size:13px}
+.team-model-picker select{flex:1;min-width:240px;max-width:550px;border:1px solid #6ec99b;border-radius:6px;padding:10px;color:#244533;background:white;font-size:13px}
+.team-model-picker>span{font-size:12px;color:#7d8c82}
+.team-model-details{background:white;border:1px solid #dce9e1;border-radius:12px;padding:25px}
+.team-model-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:15px;flex-wrap:wrap}
+.team-model-heading h2{font-size:23px;margin:6px 0 8px;color:#183f2d;overflow-wrap:anywhere}
+.team-model-heading p{margin:0;color:#78877e;font-size:13px}
+.team-status{display:flex;align-items:center;gap:6px;font-size:11px;border-radius:20px;padding:8px 10px;background:#eff6f1;color:#476d56;white-space:nowrap}
+.team-status.yes{background:#e7f7ee;color:#127d4c}.team-status.muted-status{background:#fff2eb;color:#9d6245}
+.team-meta-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:25px 0}
+.team-meta-grid>div{display:grid;gap:7px;background:#f7faf8;border:1px solid #e3eee6;border-radius:7px;padding:12px;min-width:0}
+.team-meta-grid span{font-size:11px;color:#778b7c}.team-meta-grid strong{font-size:12px;overflow-wrap:anywhere}
+.team-contract-reference{display:flex;align-items:center;gap:14px;padding:17px;background:#f0fbf5;border:1px solid #bde8cf;border-radius:9px;color:#107748}
+.team-contract-reference>div{display:grid;gap:6px}
+.team-contract-reference span{font-size:11px;font-weight:750;text-transform:uppercase;letter-spacing:.05em}
+.team-contract-reference strong{font-size:17px}.team-contract-reference small{color:#638976;font-size:11px;line-height:1.5}
+.team-detail-section{margin-top:27px}
+.team-detail-section h3{font-size:17px;margin:0 0 7px;color:#294536;display:flex;gap:10px;align-items:center}
+.team-detail-section h3 span{background:#e8f8ef;color:#00794a;border-radius:15px;padding:3px 8px;font-size:11px}
+.team-detail-section>p{color:#77877c;font-size:12px;line-height:1.6;margin:0 0 14px}
+.team-table-wrap{overflow-x:auto;border:1px solid #dfede4;border-radius:7px}
+.team-def-table{width:100%;border-collapse:collapse;min-width:660px}
+.team-def-table th{background:#eaf8f0;color:#26744d;text-align:left;font-size:11px;letter-spacing:.01em;padding:12px}
+.team-def-table td{padding:13px 12px;border-top:1px solid #e4ede6;color:#42594a;font-size:12px;vertical-align:top;line-height:1.5;max-width:420px}
+.team-def-table td strong{color:#244633;font-size:12px}
+.team-def-table td small{display:block;margin-top:5px;color:#829187;font-size:11px}
+.team-def-table td small.team-warning{color:#a84a2c}
+.team-empty-cell{text-align:center;color:#839488}
+.team-source-link{display:inline-flex;align-items:center;gap:7px;color:#00894f;font-size:13px;font-weight:650;margin-top:26px;text-decoration:none}
+.team-source-link:hover{text-decoration:underline}
+.team-dashboard>.team-demo-note{font-size:11px;color:#8b9a91;margin:25px 0 0}
+@media(max-width:800px){.team-meta-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.team-dashboard{padding:25px 15px}.team-model-details{padding:16px}}
+@media(max-width:460px){.team-meta-grid{grid-template-columns:1fr}.team-model-picker select{min-width:100%}}
