@@ -7,7 +7,7 @@ import ContractCanvas from './ContractCanvas'
 import ContractExplorer from './ContractExplorer'
 import { contractFilename } from './contractTree'
 import { DATA_TYPES, METRIC_TYPES, SIMPLE_AGGREGATIONS } from './dbtOptions'
-import { restoreContracts, persistContracts, DRAFT_STORAGE_KEY } from './draftStorage.js'
+import { restoreContracts, persistContracts } from './draftStorage.js'
 import { publishContractPR, GOVERNANCE_REPO, registryFilename } from './githubPublish.js'
 import './styles.css'
 
@@ -107,7 +107,7 @@ function App() {
         </> : active ? <>
           <div className="editor-actions"><button className="outline" onClick={() => {setView('canvas'); setValidation(null)}}><ArrowLeft size={16}/> Back to Contracts</button><div className="head-actions"><button className="outline" onClick={() => {setShowYaml(true); window.requestAnimationFrame(() => yamlRef.current?.scrollIntoView({behavior:'smooth',block:'start'}))}}><Code2 size={16}/>View YAML</button><button className="primary" onClick={() => { const errors = validateContract(active, contracts);setValidation(errors);setNotice(errors.length ? 'Please resolve validation issues before exporting.' : 'Local structural checks passed. CI remains the authoritative contract validator.') }}><CheckCircle2 size={16}/> Validate</button><button className="primary" onClick={() => { if(currentIssues.length) {setValidation(currentIssues);setNotice('Resolve validation issues before exporting.');return} download(contractFilename(active), selectedYaml); setNotice('YAML exported. Submit it through a GitHub PR for authoritative validation.')}}><Download size={16}/> Export YAML</button></div></div>
           <div className="github-publish-panel">
-            <div><strong>Save to GitHub for review</strong><p className="muted">Target: {GOVERNANCE_REPO}/{active ? registryFilename(active) : ''}. Creates a new branch and pull request; never writes directly to main or overwrites a released contract version. Drafts are saved locally automatically.</p></div>
+            <div><strong>Save to GitHub for review</strong><p className="muted">Target repository: {GOVERNANCE_REPO}. Path: {active && /^[a-z][a-z0-9_.]*$/.test(active.name) && Number.isInteger(Number(active.version)) && Number(active.version) > 0 ? registryFilename(active) : 'Complete a valid contract name/version first'}. Creates a new branch and pull request; never writes directly to main or overwrites a released contract version. Drafts are saved locally automatically.</p></div>
             <div className="github-publish-controls"><input type="password" autoComplete="off" value={githubToken} onChange={e => setGithubToken(e.target.value)} placeholder="GitHub fine-grained token (not stored)" aria-label="GitHub access token"/><button className="primary" onClick={publish} disabled={publishing || !githubToken.trim()}><GitBranch size={16}/>{publishing ? 'Creating PR...' : 'Save to GitHub (PR)'}</button></div>
             <small className="muted">Token needs Contents: Read/Write and Pull requests: Read/Write on cdo-semantic-governance. Token stays in page memory and is not saved in localStorage.</small>
             {publishedPR && <p><a href={publishedPR.url} target="_blank" rel="noopener noreferrer">Open pull request #{publishedPR.number}</a></p>}
