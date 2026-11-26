@@ -1,0 +1,5 @@
+# Install dbt Core and the PostgreSQL adapter used by federated-semantic-poc CI.
+dbt-core==1.12.6
+dbt-postgres==1.11.0
+PyYAML>=6,<7
+click>=8,<9

@@ -118,3 +118,51 @@ If SQL is new, the publishing operation adds **both SQL and YAML** in the same f
 A fine-grained GitHub token with Contents and Pull Requests read/write permissions on `robin-bajaj/federated-semantic-poc` is entered into the browser for PR creation and is not persisted. This remains **prototype-only authoring**, not authenticated, server-side authorization, or live dbt Cloud execution. Before production, replace browser tokens with a GitHub App + server-enforced role permissions and introduce full browser end-to-end tests. Selecting an existing SQL model already described by another semantic YAML may cause dbt configuration conflicts; the team must review these in CI.
 
 Generated models become visible in the Team workspace only after the PR merges to federated `main` and the user refreshes discovery.
+
+## Fast Validate staging with dbt Core (local POC)
+
+**Team A → Create Semantic Model** and **Team C → Create Semantic Model** now include **Validate Staging (dbt Core)**. This validates the exact unsaved staging SQL (for a new SQL model) and unsaved semantic YAML without first creating a GitHub PR or running dbt Studio.
+
+### One-time setup
+
+You need Python 3.12, Git, and network access to the two repositories. From the Contract Designer project folder:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r server/requirements.txt
+dbt --version
+```
+
+Run the backend and frontend in **separate terminals** (activate the venv in the backend terminal):
+
+```bash
+# Terminal 1 — backend on 127.0.0.1:8765
+npm run dev:api
+```
+
+```bash
+# Terminal 2 — frontend on localhost:5173 (Vite proxies /api to the backend)
+npm ci
+npm run dev
+```
+
+Open `http://localhost:5173`, select Team A or Team C, create a semantic model, enter SQL or select an existing team-owned staging SQL model, and choose **Validate Staging (dbt Core)**. The editor shows successful/failed stages and dbt compiler/parser output. Tokens are **not** sent to this backend.
+
+### What happens
+
+The local backend clones fresh disposable checkouts of `robin-bajaj/federated-semantic-poc/main` and `robin-bajaj/cdo-semantic-governance/main` into a temporary directory. It overlays the current unsaved team model SQL and YAML in **the appropriate team folder**, configures a dummy dbt Postgres profile, and runs:
+
+```bash
+python -m cdo_governance.semantic.contract_registry --registry ../governance/contracts
+python -m cdo_governance.semantic.semantic_compiler --registry ../governance/contracts --project . --bindings-output .ci/cdo-resolved-bindings.yml
+dbt parse --profiles-dir .ci --no-partial-parse
+```
+
+The temporary directory is deleted after validation. Nothing is committed, published, deployed, or sent to dbt Cloud. SQL is **not executed**, so this cannot establish physical staging types, actual data values, or database model contract enforcement; those still require a dbt build with live Neon credentials. The workspace needs Internet access to clone current `main` on each validation, so this is not an offline service. Existing source mode verifies the source SQL file exists in the team's staging folder.
+
+### Security and production limits
+
+**Development/POC only.** The backend binds loopback (`127.0.0.1:8765`), has a payload limit, validates identifier/path inputs, sets timeouts and limits concurrent checks, and never persists credentials. However, **dbt macros and Jinja can execute Python code**. The temporary checkout alone is **not** a security sandbox. Do not expose this API on a network or accept SQL/YAML from untrusted users. Real production integration requires SSO, role authorization, sandboxed worker containers with restricted network/filesystem access, rate limiting, artifact retention policies, and a controlled GitHub App. This backend does not constitute live dbt Cloud/Studio integration.
+
+The existing federated CI pins a reviewed governance commit. This local preview uses governance `main` for the most recent approved CDO contracts. CI remains authoritative if its pinned compiler differs. Use `npm test` for frontend checks and `npm run test:api` for mock subprocess backend tests.

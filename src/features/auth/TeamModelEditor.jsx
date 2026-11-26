@@ -1,11 +1,12 @@
 import React, { useMemo, useState } from 'react'
-import { ArrowLeft, CheckCircle2, Download, GitPullRequest, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Download, GitPullRequest, Plus, Trash2, PlayCircle, AlertCircle } from 'lucide-react'
 import {
   createEmptyTeamModel, chooseContract, availableContracts, validateTeamDraft,
   buildTeamModelDocument, toTeamModelYaml, teamModelPath,
 } from '../../domain/semantics/teamModelAuthoring.js'
 import { DATA_TYPES, SIMPLE_AGGREGATIONS } from '../../domain/contracts/dbtOptions.js'
 import { publishTeamModelPR } from '../../services/github/teamModelPublish.js'
+import { fastValidateTeamModel } from '../../services/validation/dbtCoreValidation.js'
 import './TeamModelEditor.css'
 
 const updateIndex=(items,index,patch)=>items.map((item,i)=>i===index?{...item,...patch}:item)
@@ -21,6 +22,8 @@ export default function TeamModelEditor({role,contracts,sourceModels,onBack}) {
   const [publishing,setPublishing]=useState(false)
   const [result,setResult]=useState(null)
   const [error,setError]=useState('')
+  const [validating,setValidating]=useState(false)
+  const [validationResult,setValidationResult]=useState(null)
   const selectedAttrs=(draft.attributes||[]).filter(a=>a.selected)
   const expressions=[...new Set([...selectedAttrs.map(a=>a.name),...draft.columns.map(c=>c.name)].filter(Boolean))]
   const issues=useMemo(()=>validateTeamDraft(draft,role,contracts,sourceModels),[draft,role,contracts,sourceModels])
@@ -30,13 +33,28 @@ export default function TeamModelEditor({role,contracts,sourceModels,onBack}) {
     catch{return ''}
   },[draft,role,contracts,sourceModels,issues])
 
-  const setField=(key,value)=>{setDraft(current=>({...current,[key]:value}));setError('');setResult(null)}
+  const setField=(key,value)=>{setDraft(current=>({...current,[key]:value}));setError('');setResult(null);setValidationResult(null)}
   const changeList=(key,index,patch)=>setField(key,updateIndex(draft[key],index,patch))
   const addList=(key,item)=>setField(key,[...draft[key],item])
   const removeList=(key,index)=>setField(key,draft[key].filter((_,i)=>i!==index))
   const setContract=key=>{
     try{setDraft(current=>chooseContract(current,key,contracts));setError('');setResult(null)}
     catch(err){setError(err.message)}
+  }
+  const validateStaging=async()=>{
+    setError('')
+    setValidationResult(null)
+    if(issues.length || !generated) {setError('Resolve local structural issues before running dbt Core.');return}
+    setValidating(true)
+    const signature=JSON.stringify([role,draft.sourceModel,draft.semanticName,draft.sourceMode,draft.sourceSql,generated])
+    try {
+      const response=await fastValidateTeamModel({
+        role,sourceModel:draft.sourceModel,semanticName:draft.semanticName,
+        sourceMode:draft.sourceMode,sourceSql:draft.sourceSql,yamlText:generated,
+      })
+      setValidationResult({ ...response,signature })
+    } catch(err) {setValidationResult({ok:false,error:err.message,steps:[],log:'',signature})}
+    finally {setValidating(false)}
   }
   const publish=async()=>{
     setError('');setResult(null)
@@ -64,7 +82,7 @@ export default function TeamModelEditor({role,contracts,sourceModels,onBack}) {
       <section>
         <h3>1. dbt source model</h3>
         <label>Starting point
-          <select value={draft.sourceMode} onChange={e=>{setDraft(current=>({...current,sourceMode:e.target.value,sourceModel:'',sourceSql:''}));setResult(null)}}>
+          <select value={draft.sourceMode} onChange={e=>{setDraft(current=>({...current,sourceMode:e.target.value,sourceModel:'',sourceSql:''}));setResult(null);setValidationResult(null)}}>
             <option value="new">Create a new SQL model</option>
             <option value="existing">Use an existing team SQL model</option>
           </select>
@@ -163,11 +181,25 @@ export default function TeamModelEditor({role,contracts,sourceModels,onBack}) {
           <input type="password" autoComplete="off" value={token} onChange={e=>setToken(e.target.value)} placeholder="Token with Contents and Pull requests read/write"/>
         </label>
         <div className="team-editor-buttons">
+          <button type="button" className="outline" disabled={!generated||validating} onClick={validateStaging}>
+            <PlayCircle size={15}/>{validating?'Validating in dbt Core…':'Validate Staging (dbt Core)'}
+          </button>
           <button type="button" className="outline" disabled={!generated} onClick={()=>downloadYaml(`${draft.semanticName}.yml`,generated)}><Download size={15}/> Download YAML</button>
           <button type="button" className="primary" disabled={issues.length>0||publishing||!token.trim()} onClick={publish}>
             <GitPullRequest size={15}/>{publishing?'Creating PR…':'Save to GitHub (PR)'}
           </button>
         </div>
+        {validationResult && <div className={`team-dbt-results ${validationResult.ok?'passed':'failed'}`} role="status">
+          <h4>{validationResult.ok?<CheckCircle2 size={17}/>:<AlertCircle size={17}/>}
+            {validationResult.ok?'dbt Core fast validation passed':'dbt Core fast validation did not pass'}</h4>
+          {validationResult.error && <p>{validationResult.error}</p>}
+          {validationResult.steps?.length>0 && <ul>{validationResult.steps.map((step,index)=><li key={index}>
+            {step.status==='passed'?<CheckCircle2 size={14}/>:<AlertCircle size={14}/>}
+            {step.name} — {step.status}
+          </li>)}</ul>}
+          {validationResult.log && <details><summary>dbt / compiler output</summary><pre>{validationResult.log}</pre></details>}
+          <small>Parse-only: does not execute SQL, inspect Neon columns, or enforce physical database contracts.</small>
+        </div>}
         {error && <p className="team-editor-error" role="alert">{error}</p>}
         {result && <p className="team-editor-success"><CheckCircle2 size={15}/> PR #{result.number} created. <a href={result.url} target="_blank" rel="noopener noreferrer">Open for review</a></p>}
         <p className="team-editor-note">The PR targets federated-semantic-poc/main. It does not run dbt Cloud immediately or deploy your model. CI validates the compiled project.</p>
