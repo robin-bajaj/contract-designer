@@ -182,3 +182,19 @@ Changing SQL or the model name invalidates the old status immediately. In-flight
 **This is a dbt parsing check, not a SQL execution check.** dbt parse can pass even when SQL syntax would later fail in PostgreSQL, because it does not execute or fully validate physical SQL. A true SQL-executable tick requires a database-connected run/build. Do not treat a green parse tick as proof of physical columns or data types.
 
 The existing **Validate Staging (dbt Core)** button in the full semantic model form remains available for a combined SQL/YAML check. Start the API with `npm run dev:api` and the React app with `npm run dev` as documented above. Automatic validation creates temporary checkouts and can be slow if GitHub is unavailable; it is a local POC, not a shared production service.
+
+## Fix: inline staging validation not starting
+
+The New SQL Model form now fills in an actual editable default source model identifier (for example `team_a_new_positions`), rather than showing that name only as placeholder text. With a nonempty SQL draft, the inline validation runs automatically after typing pauses.
+
+The local validation backend now uses **SQLGlot (PostgreSQL dialect)** for a fast initial syntax check. Gibberish such as `SELECTertygrab` is flagged before the Git clone and dbt Core parsing. Valid SQL continues to CDO compilation and dbt Core parsing. dbt Jinja SQL skips this initial SQLGlot parse because raw Jinja is not directly valid PostgreSQL syntax; dbt Core still parses project metadata.
+
+To enable this new check after merging, reinstall the backend dependencies and restart **both** processes:
+
+```bash
+source .venv/bin/activate
+python -m pip install -r server/requirements.txt
+npm run dev:api
+```
+
+In another terminal run `npm run dev`. Validation cannot run if the local Python backend is not running; the UI shows an availability warning in that case. SQLGlot is a preliminary parser and dbt parse does not execute SQL against Neon. Neither establishes physical database schema correctness.
