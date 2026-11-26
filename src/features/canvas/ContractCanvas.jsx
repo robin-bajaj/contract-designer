@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Maximize2, Minus, Plus, RotateCcw, Move, MousePointer2, Eye, GitBranch } from 'lucide-react'
 import { canvasContextAction, positionCanvasMenu } from './canvasActions.js'
-import { createLineageLayout, lineageEdges, NODE_WIDTH, NODE_HEIGHT } from './lineage'
+import { createLineageLayout, lineageEdges, NODE_WIDTH, NODE_HEIGHT } from './lineage.js'
 
 const MIN_SCALE = 0.4
 const MAX_SCALE = 2

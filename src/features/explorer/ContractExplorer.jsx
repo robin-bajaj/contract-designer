@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { ChevronDown, ChevronRight, Layers, Link2, Plus, X, Eye, GitBranch } from 'lucide-react'
-import { buildContractTree } from './contractTree'
+import { buildContractTree } from '../../domain/contracts/contractTree.js'
 
 /** Inheritance tree for the sidebar; nested depth comes from uses, not name prefixes. */
 export default function ContractExplorer({ contracts, search, activeId, onOpen, onRemove, onAddChild }) {

@@ -1,6 +1,5 @@
 import yaml from 'js-yaml'
-import { initialContracts, toContractDocument } from './contracts.js'
-import { contractKey } from './contractTree.js'
+import { contractKey } from '../../domain/contracts/contractTree.js'
 import { GOVERNANCE_REPO } from './githubPublish.js'
 
 export const REGISTRY_BASELINE_KEY = 'contract-designer.github-registry.v1'
@@ -56,39 +55,4 @@ export async function fetchGovernanceContracts(fetchImpl = fetch, token = '') {
   }))
   if (new Set(contracts.map(contractKey)).size !== contracts.length) throw Error('Duplicate contract name/version in GitHub registry')
   return contracts
-}
-export function restoreRegistryBaseline(storage = globalThis.localStorage) {
-  try {
-    const saved = JSON.parse(storage?.getItem(REGISTRY_BASELINE_KEY) || '[]')
-    return Array.isArray(saved) ? saved : []
-  } catch { return [] }
-}
-export function persistRegistryBaseline(contracts, storage = globalThis.localStorage) {
-  try { storage?.setItem(REGISTRY_BASELINE_KEY, JSON.stringify(contracts)); return true } catch { return false }
-}
-
-/** Three-way merge: never replace a locally changed draft. Existing id and canvas positions survive. */
-export function mergeRegistryContracts(local, remote, previous = []) {
-  const seeds = new Map(initialContracts.map(c => [contractKey(c), c]))
-  const baselines = new Map(previous.map(c => [contractKey(c), c]))
-  const result = copy(local)
-  let added = 0, updated = 0, preserved = 0
-  for (const source of remote) {
-    const key = contractKey(source)
-    const index = result.findIndex(c => contractKey(c) === key)
-    if (index < 0) {
-      result.push({ ...copy(source), id: result.some(c => c.id === source.id) ? `github:${key}` : source.id })
-      added++
-      continue
-    }
-    const existing = result[index]
-    const baseline = baselines.get(key) || seeds.get(key)
-    if (baseline && equivalent(existing, baseline)) {
-      result[index] = { ...copy(source), id: existing.id }
-      updated++
-    } else if (equivalent(existing, source)) {
-      // Already up to date; do not disturb canvas state.
-    } else preserved++
-  }
-  return { contracts: result, added, updated, preserved }
 }
