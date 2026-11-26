@@ -7,5 +7,5 @@ const source = readFileSync(fileURLToPath(new URL('./main.jsx', import.meta.url)
 
 test('React entrypoint resolves the React identifier used by classic JSX transform', () => {
   assert.match(source, /import\s+React\s+from\s+['"]react['"]/)
-  assert.match(source, /createRoot\(root\)\.render\(<App\s*\/>\)/)
+  assert.match(source, /import\s+RoleGateway\s+from\s+['\"]\.\/features\/auth\/RoleGateway\.jsx['\"]/)\n  assert.match(source, /createRoot\(root\)\.render\(<RoleGateway\s*\/>\)/)
 })
