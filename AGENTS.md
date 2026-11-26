@@ -20,3 +20,7 @@ Use PascalCase for React components, camelCase for non-component files, and colo
 ## Release discipline
 
 Run `npm ci && npm run check` and review CI before merging. No access token may enter browser storage, URLs, logs, or committed files. Direct browser GitHub token publishing is a prototype limitation and must be replaced with authenticated server-side operations before multi-user production use. Keep changes scoped to this repository unless an independent governance PR is explicitly requested.
+
+## Demo role gateway
+
+`src/features/auth/` implements a three-role **UI demonstration only**. Only the CDO selection mounts Contract Designer; Team A and Team C render placeholder team workspaces. Do not treat this as authentication or authorization, and do not assert role restrictions are enforced server-side. Production requires an identity provider, server-side sessions, RBAC, and GitHub App integration before protected actions can be trusted.
