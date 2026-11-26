@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from server.fast_validate import InputError, validate_dbt, validate_payload
+from server.fast_validate import InputError, validate_dbt, validate_payload, check_staging_sql
 
 YAML = """version: 2
 models:
@@ -80,6 +80,27 @@ class FastValidationTests(unittest.TestCase):
         self.assertFalse(result["ok"])
         self.assertIn("not in this team's staging folder", result["error"])
 
+
+    def test_sqlglot_accepts_valid_postgres_select(self):
+        check_staging_sql("select position_id from positions")
+
+    def test_sqlglot_rejects_typing_gibberish_as_a_query(self):
+        with self.assertRaisesRegex(InputError, "single SELECT"):
+            check_staging_sql("SELECTertygrab")
+
+    def test_sqlglot_rejects_incomplete_select(self):
+        with self.assertRaises(InputError):
+            check_staging_sql("select from")
+
+    def test_invalid_draft_returns_error_before_fetching_github(self):
+        draft = {"validationScope": "staging", "role": "team-a",
+                 "sourceModel": "team_a_new_positions", "sourceMode": "new",
+                 "sourceSql": "SELECTertygrab"}
+        def must_not_run(*args, **kwargs):
+            self.fail("Should reject invalid SQL without invoking git/dbt")
+        result = validate_dbt(draft, runner=must_not_run)
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["steps"][0]["name"], "SQL syntax")
 
     def test_staging_only_accepts_sql_before_semantic_model_is_defined(self):
         draft = { "validationScope":"staging", "role":"team-a",
