@@ -2,13 +2,13 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import yaml from 'js-yaml'
 import { ArrowLeft, ArrowRight, CheckCircle2, ChevronDown, CircleAlert, Code2, Download, FilePlus2, FolderTree, GitBranch, Layers, Link2, Plus, RotateCcw, Save, Search, Trash2, Upload, X } from 'lucide-react'
-import { initialContracts, toContractDocument, validateContract } from './contracts'
+import { toContractDocument, validateContract } from './contracts'
 import ContractCanvas from './ContractCanvas'
 import ContractExplorer from './ContractExplorer'
 import { contractFilename } from './contractTree'
 import { DATA_TYPES, METRIC_TYPES, SIMPLE_AGGREGATIONS } from './dbtOptions'
-import { restoreContracts, persistContracts } from './draftStorage.js'
-import { fetchGovernanceContracts, mergeRegistryContracts, restoreRegistryBaseline, persistRegistryBaseline } from './githubRegistry.js'
+
+import { fetchGovernanceContracts, restoreRegistryBaseline, persistRegistryBaseline } from './githubRegistry.js'
 import { publishContractPR, GOVERNANCE_REPO, registryFilename } from './githubPublish.js'
 import './styles.css'
 
@@ -20,7 +20,8 @@ const download = (name, text, mime = 'text/yaml') => {
 }
 const toYaml = c => yaml.dump(toContractDocument(c), { noRefs: true, lineWidth: 100, sortKeys: false })
 function App() {
-  const [contracts, setContracts] = useState(restoreContracts)
+  const [contracts, setContracts] = useState(restoreRegistryBaseline)
+  const [draftContract, setDraftContract] = useState(null)
   const [activeId, setActiveId] = useState(null)
   const [search, setSearch] = useState('')
   const [view, setView] = useState('canvas')
@@ -30,29 +31,27 @@ function App() {
   const [githubToken, setGithubToken] = useState('')
   const [publishing, setPublishing] = useState(false)
   const [publishedPR, setPublishedPR] = useState(null)
-  const [draftSaved, setDraftSaved] = useState(true)
   const [syncingRegistry, setSyncingRegistry] = useState(false)
   const [registryStatus, setRegistryStatus] = useState('')
   const syncGitHub = async (token = '', silent = false) => {
     setSyncingRegistry(true)
     try {
       const remote = await fetchGovernanceContracts(fetch, token)
-      const baseline = restoreRegistryBaseline()
-      setContracts(current => {
-        const merged = mergeRegistryContracts(current, remote, baseline)
-        const summary = `${remote.length} contracts read from GitHub · ${merged.added} added · ${merged.updated} refreshed · ${merged.preserved} local edits preserved.`
-        setRegistryStatus(summary)
-        if (!silent || merged.added || merged.updated || merged.preserved) setNotice(summary)
-        return merged.contracts
-      })
+      // GitHub main is the sole source for the catalog: never merge local samples or drafts.
+      setContracts(remote)
       persistRegistryBaseline(remote)
+      setDraftContract(null)
+      setActiveId(null)
+      setView('canvas')
+      const summary = `${remote.length} approved contracts loaded from GitHub main.`
+      setRegistryStatus(summary)
+      if (!silent) setNotice(summary)
     } catch (error) {
-      setRegistryStatus(`GitHub sync unavailable: ${error.message}`)
+      setRegistryStatus(`GitHub sync unavailable: ${error.message}. Showing last loaded GitHub snapshot, if available.`)
       if (!silent) setNotice(`GitHub sync failed: ${error.message}`)
     } finally { setSyncingRegistry(false) }
   }
   useEffect(() => { syncGitHub('', true) }, []) // Load approved main-branch contracts on startup.
-  useEffect(() => { setDraftSaved(persistContracts(contracts)) }, [contracts])
   const publish = async () => {
     if (!active || publishing) return
     const errors = validateContract(active, contracts)
@@ -68,12 +67,13 @@ function App() {
   }
   const importRef = useRef(null)
   const yamlRef = useRef(null)
-  const active = contracts.find(c => c.id === activeId)
+  const active = draftContract?.id === activeId ? draftContract : contracts.find(c => c.id === activeId)
   const filtered = contracts.filter(c => c.name.toLowerCase().includes(search.toLowerCase()))
   const selectedYaml = active ? toYaml(active) : ''
   const currentIssues = active ? validateContract(active, contracts) : []
   const update = updater => {
-    setContracts(all => all.map(c => c.id === activeId ? updater(clone(c)) : c))
+    if (draftContract?.id === activeId) setDraftContract(current => updater(clone(current)))
+    else { const current = contracts.find(c => c.id === activeId); if (current) setDraftContract(updater(clone(current))) }
     setValidation(null)
   }
   const updateField = (key, value) => update(c => ({ ...c, [key]: value }))
@@ -84,13 +84,13 @@ function App() {
     while (contracts.some(c => c.name === name)) name = `${base}_${suffix++}`
     const parent = selectedParent || (active && contracts.some(c => c.id === active.id) ? active : null) || contracts.find(c => c.name === 'cdo.all') || contracts.find(c => !c.uses)
     const item = { id: name, name, version: 1, description: '', uses: child && parent ? { name: parent.name, version: parent.version } : null, include: child ? { attributes: [], metrics: [] } : null, attributes: [], metrics: [] }
-    setContracts(old => [...old, item]); setActiveId(item.id); setView('edit'); setShowYaml(true); setNotice('Draft created and automatically saved in this browser. Publish to GitHub when ready.'); setValidation(null)
+    setDraftContract(item); setActiveId(item.id); setView('edit'); setShowYaml(true); setNotice('Unpublished editor draft. Publish through a PR; it appears in the catalog only after merge.'); setValidation(null)
   }
   const removeContract = id => {
     if (contracts.some(c => c.uses?.name === contracts.find(x => x.id === id)?.name)) { setNotice('Cannot remove this contract: a child contract depends on it.'); return }
-    setContracts(old => old.filter(c => c.id !== id)); if (activeId === id) { setActiveId(null); setView('canvas') }
+    setNotice('The catalog is GitHub-only. Remove contracts through a governance repository pull request.')
   }
-  const open = id => { setActiveId(id); setView('edit'); setShowYaml(true); setValidation(null); setNotice('') }
+  const open = id => { setDraftContract(null); setActiveId(id); setView('edit'); setShowYaml(true); setValidation(null); setNotice('') }
   const importContract = async e => {
     const f = e.target.files?.[0]; if (!f) return
     try {
@@ -99,9 +99,8 @@ function App() {
       const child = Boolean(raw.uses)
       const c = { id: `import-${Date.now()}`, name: raw.name, version: Number(raw.version), description: raw.description || '', uses: child ? raw.uses : null, include: child ? { attributes: raw.include?.attributes || [], metrics: raw.include?.metrics || [] } : null, attributes: child ? [] : raw.attributes || [], metrics: child ? [] : raw.metrics || [] }
       const existing = contracts.find(x => x.name === c.name && Number(x.version) === Number(c.version))
-      if (existing) { setContracts(all => all.map(x => x.id === existing.id ? { ...c, id: existing.id } : x)); open(existing.id) }
-      else { setContracts(all => [...all, c]); open(c.id) }
-      setNotice(`Imported ${f.name}. Draft is automatically saved in this browser.`)
+      setDraftContract({ ...c, id: existing?.id || c.id }); setActiveId(existing?.id || c.id); setView('edit'); setShowYaml(true)
+      setNotice(`Imported ${f.name} into the editor only. It will not appear in the GitHub catalog until published and merged.`)
     } catch(err) { setNotice(`Import failed: ${err.message}`) }
     e.target.value = ''
   }
@@ -111,7 +110,7 @@ function App() {
   const metrics = active?.metrics || []
   const cards = filtered
   return <div className="app-shell">
-    <header className="topbar"><div className="brand"><GitBranch size={23}/><strong>CONTRACT DESIGNER</strong></div><span className="tagline">Design standalone and parent/child business contracts with live lineage</span><div className="top-actions"><span className="pill">{draftSaved ? 'Drafts saved in this browser' : 'Browser storage unavailable · export a backup'}</span></div></header>
+    <header className="topbar"><div className="brand"><GitBranch size={23}/><strong>CONTRACT DESIGNER</strong></div><span className="tagline">Design standalone and parent/child business contracts with live lineage</span><div className="top-actions"><span className="pill">GitHub registry · main branch</span></div></header>
     <div className="workspace">
       <aside className="sidebar">
         <div className="section-label">MY CONTRACTS</div>
@@ -119,19 +118,19 @@ function App() {
         <div className="folder-label"><FolderTree size={17}/> My Contracts</div>
         <button className="outline stretch" disabled={syncingRegistry} onClick={() => syncGitHub(githubToken)}><RotateCcw size={15}/>{syncingRegistry ? "Syncing GitHub..." : "Sync from GitHub"}</button>
         {registryStatus && <p className="registry-sync-status" role="status">{registryStatus}</p>}
-        <ContractExplorer contracts={contracts} search={search} activeId={activeId} onOpen={open} onRemove={removeContract} onAddChild={parent => addContract(true, parent)}/>
-        <div className="sidebar-bottom"><button className="outline stretch" onClick={() => importRef.current?.click()}><Upload size={15}/> Import contract YAML</button><input ref={importRef} accept=".yml,.yaml,text/yaml" type="file" hidden onChange={importContract}/><p>Approved contracts are loaded from the governance repository. Your local drafts are preserved and autosaved. Sync again after a PR is merged to main.</p></div>
+        <ContractExplorer contracts={contracts} search={search} activeId={activeId} onOpen={open} onRemove={null} onAddChild={parent => addContract(true, parent)}/>
+        <div className="sidebar-bottom"><button className="outline stretch" onClick={() => importRef.current?.click()}><Upload size={15}/> Import contract YAML</button><input ref={importRef} accept=".yml,.yaml,text/yaml" type="file" hidden onChange={importContract}/><p>Only approved contracts on governance GitHub main appear here. Unpublished work remains in the editor; export YAML as a backup before leaving or publish through a PR.</p></div>
       </aside>
       <main className="main-content">
         {notice && <div className="notice"><CircleAlert size={16}/><span>{notice}</span><button className="icon-quiet" onClick={() => setNotice('')}><X size={15}/></button></div>}
         {view === 'canvas' ? <>
-          <div className="page-head"><h1>My Contracts</h1><div className="head-actions"><button className="outline" onClick={() => { if (!window.confirm('Replace all saved drafts with the example contracts? This cannot be undone.')) return; setContracts(clone(initialContracts)); setNotice('Example contracts restored. Draft storage will be updated.'); setActiveId(null) }}><RotateCcw size={15}/> Reset samples</button></div></div>
+          <div className="page-head"><h1>My Contracts</h1></div>
           <p className="muted">Left-drag the canvas to pan or move contracts. Right-click blank space to create a standalone contract, or right-click a contract for options.</p>
           <div className="graph-area"><ContractCanvas contracts={cards} onOpen={open} onCreateStandalone={() => addContract(false)} onCreateChild={parent => addContract(true, parent)}/></div>
         </> : active ? <>
           <div className="editor-actions"><button className="outline" onClick={() => {setView('canvas'); setValidation(null)}}><ArrowLeft size={16}/> Back to Contracts</button><div className="head-actions"><button className="outline" onClick={() => {setShowYaml(true); window.requestAnimationFrame(() => yamlRef.current?.scrollIntoView({behavior:'smooth',block:'start'}))}}><Code2 size={16}/>View YAML</button><button className="primary" onClick={() => { const errors = validateContract(active, contracts);setValidation(errors);setNotice(errors.length ? 'Please resolve validation issues before exporting.' : 'Local structural checks passed. CI remains the authoritative contract validator.') }}><CheckCircle2 size={16}/> Validate</button><button className="primary" onClick={() => { if(currentIssues.length) {setValidation(currentIssues);setNotice('Resolve validation issues before exporting.');return} download(contractFilename(active), selectedYaml); setNotice('YAML exported. Submit it through a GitHub PR for authoritative validation.')}}><Download size={16}/> Export YAML</button></div></div>
           <div className="github-publish-panel">
-            <div><strong>Save to GitHub for review</strong><p className="muted">Target repository: {GOVERNANCE_REPO}. Path: {active && /^[a-z][a-z0-9_.]*$/.test(active.name) && Number.isInteger(Number(active.version)) && Number(active.version) > 0 ? registryFilename(active) : 'Complete a valid contract name/version first'}. Creates a new branch and pull request; never writes directly to main or overwrites a released contract version. Drafts are saved locally automatically.</p></div>
+            <div><strong>Save to GitHub for review</strong><p className="muted">Target repository: {GOVERNANCE_REPO}. Path: {active && /^[a-z][a-z0-9_.]*$/.test(active.name) && Number.isInteger(Number(active.version)) && Number(active.version) > 0 ? registryFilename(active) : 'Complete a valid contract name/version first'}. Creates a new branch and pull request; never writes directly to main or overwrites a released contract version. Unpublished editor changes are temporary; export YAML for backup.</p></div>
             <div className="github-publish-controls"><input type="password" autoComplete="off" value={githubToken} onChange={e => setGithubToken(e.target.value)} placeholder="GitHub fine-grained token (not stored)" aria-label="GitHub access token"/><button className="primary" onClick={publish} disabled={publishing || !githubToken.trim()}><GitBranch size={16}/>{publishing ? 'Creating PR...' : 'Save to GitHub (PR)'}</button></div>
             <small className="muted">Token needs Contents: Read/Write and Pull requests: Read/Write on cdo-semantic-governance. Token stays in page memory and is not saved in localStorage.</small>
             {publishedPR && <p><a href={publishedPR.url} target="_blank" rel="noopener noreferrer">Open pull request #{publishedPR.number}</a></p>}

@@ -1,92 +1,40 @@
 # Contract Designer
 
-Independent React/Vite frontend prototype for the `cdo-semantic-governance` business contract registry. Visual layout follows the supplied green-and-white contract explorer/editor reference. This project **does not modify** the existing governance or federated dbt repositories.
+Contract Designer displays contracts approved in the GitHub governance registry at `robin-bajaj/cdo-semantic-governance/contracts/` on the `main` branch.
 
 ## Run locally
 
 ```bash
 npm install
+npm test
+npm run build
 npm run dev
 ```
 
-Open the local URL printed by Vite (usually `http://localhost:5173`).
+Open the Vite URL (usually http://localhost:5173).
 
-## Features
+## GitHub-only catalog
 
-- Interactive parent/child lineage canvas with draggable cards, pan, zoom, fit-to-view, reset, and search
-- Contextual creation: click blank canvas for a new standalone contract; click a standalone node for View / Create Child options
-- Edit standalone attributes and simple metrics
-- Select inherited attributes/metrics from a version-pinned parent
-- Import YAML; live YAML preview and per-contract downloads named exactly `<contract.name>.yml`
-- Local structural validation and duplicate-name/unknown-reference checks
-- Seeded with the **actual** `cdo.all`, `cdo.position`, and `cdo.counterparty` definitions from the governance repo (as of Nov 26, 2026)
+- Only contracts on governance repository `main` appear on the canvas and sidebar.
+- The app fetches GitHub's contract-directory listing and reads YAML through `raw.githubusercontent.com` to reduce API rate-limit issues. For GitHub HTTP 403/429 responses, it falls back to jsDelivr directory metadata. For raw content failures, it retries through jsDelivr.
+- The last **successfully loaded GitHub snapshot** is cached in browser localStorage only to keep approved contracts visible during an outage; there are no seeded-example or local-draft contracts in the catalog.
+- **Sync from GitHub** replaces the catalog with the current approved GitHub registry. It will not show open, unmerged pull requests.
+- Contract relationships come from `uses: {name, version}` in YAML. Every version is a separate identity; a child referencing a missing parent version appears as an independent root pending registry correction.
 
-## Compatibility and caveats
+## Editing and publishing
 
-The project supports the repository's logical contract YAML shapes: `name`, integer `version`, `attributes`, `metrics`, and child `uses/include`. It intentionally avoids treating generic dbt model `contract.enforced` as equivalent to this logical CDO contract format.
+- Right-click a contract, select **View Contract**, and edit or change the version.
+- Right-click the empty canvas to draft a new standalone contract, or right-click an existing contract to draft a child.
+- Draft work is kept **only in the editor during this page session**; it never appears as an approved contract in the catalog before being merged. Export YAML before refreshing/leaving if you need a local backup.
+- The **Save to GitHub (PR)** control creates a proposal in `robin-bajaj/cdo-semantic-governance` using the versioned registry filename (`contracts/cdo_position_v2.yml`). A released version already on `main` cannot be overwritten through this UI.
+- After governance CI and human review, merge the PR into governance `main`, then click **Sync from GitHub** to see it in the canvas.
+- For GitHub publishing, provide a fine-grained token scoped to the governance repository with Contents Read/Write and Pull Requests Read/Write. The token stays in page memory, not localStorage.
+- Structural validation in the browser is preliminary; the governance repository's own validator and CI are authoritative.
 
-Contract definitions and edits are **automatically saved to browser localStorage**, and restored when the page is refreshed in the same browser/profile. Canvas card positions are saved separately in browser localStorage and can be reset from the canvas toolbar; the layout never modifies contract YAML. Use **Export YAML** for a portable backup. A GitHub PR publishing action is available with a user-provided fine-grained access token (in page memory only; never stored). No server-side OAuth or backend validation is included. Local validation is only a preflight: the existing Python `contract_registry` validator and federated CI remain authoritative. The UI's standalone metric editor currently supports simple SUM/COUNT metrics over named attributes. For existing sophisticated definitions, avoid overwriting unsupported fields without a round-trip fidelity test.
+## Canvas
 
-Import the YAML files from `cdo-semantic-governance/contracts/` to edit. Keep filenames such as `cdo_position_v1.yml`; export filenames are now `cdo.position.yml`, `cdo.all.yml`, etc., matching the logical contract name requested in the UI. **The existing governance registry uses filenames such as `cdo_position_v1.yml`**; rename downloaded files to that registry convention before adding them to the governance repository, then raise PRs for review. Do not commit changes to published contract versions in place unless your governance process permits it; prefer a new version.
+Left-drag nodes to reposition; left-drag empty canvas space to pan. Right-click to open the contextual menu. Canvas positions persist separately from contract definitions and never affect exported YAML.
 
-## Create the separate GitHub repo
+## Security and deployment
 
-Create an empty repository named `contract-designer` under the GitHub account/organization of your choice, without auto-generating files. In this downloaded project's directory:
-
-```bash
-git init
-git add .
-git commit -m "feat: bootstrap visual contract designer"
-git branch -M main
-git remote add origin https://github.com/YOUR_OWNER/contract-designer.git
-git push -u origin main
-```
-
-The frontend has **no runtime dependency on the other two repositories**. A later integration can read contract YAML through a controlled backend/API and create reviewed PRs, while keeping the GitHub YAML registry the source of truth.
-
-## Interactive canvas
-
-Drag contracts to reposition, drag empty canvas space to pan, zoom using the toolbar or scroll wheel, use Fit to center all contracts, or Reset positions to restore the automatic layout. Clicking a card opens the existing editor. Node coordinates are UI preferences only and never become part of exported governance YAML.
-
-## Verification
-
-```bash
-npm test
-npm run build
-```
-
-The layout tests use Node's built-in test runner. The build requires installed npm dependencies.
-
-## Contract tree and YAML preview
-
-The sidebar nests child contracts beneath the exact versioned parent referenced in their `uses` metadata. Expand/collapse using the chevron, and use the + icon beside a parent to create a child of that contract. Searching keeps ancestor nodes visible for context. Missing-parent drafts appear as roots rather than vanishing. Selecting a contract opens its editor with a **live YAML preview** beneath contract details; choose **View YAML** to scroll to it or **Download .yml** to export its exact contract name. Preview and export use the same `toContractDocument` serializer.
-
-Draft edits are automatically persisted to browser localStorage. Publishing to the governance repository creates a pull request without modifying main.
-
-## dbt-oriented editor controls
-
-The standalone contract editor offers PostgreSQL-compatible SQL data types (matching the current Neon/dbt environment) and supported **simple** metric aggregations: `sum`, `count`, `count_distinct`, `average`, `min`, `max`, `median`, and `sum_boolean`. These types are adapter-specific; dbt has no single universal physical SQL-type enumeration. Complex dbt metric categories (ratio, derived, cumulative, conversion) require different metadata and are deliberately not offered as if they were simple metric types. The logical CDO contract format remains separate from dbt semantic-model YAML.
-
-Metric descriptions are edited inline, and the Fill Nulls field is no longer shown. Existing imported/seeded `fill_nulls_with` values are **preserved** in exported YAML, rather than silently deleted. Live YAML preview follows the editor fields and validation at the bottom of the page.
-
-## Canvas-first creation workflow
-
-Creation is contextual rather than driven by permanent plus buttons. **Right-click blank canvas space** and choose **Create Standalone Contract**. **Right-click a standalone contract node** to choose **View Contract** or **Create Child Contract** linked to that parent. Child nodes also show contract actions on right-click. Standalone contracts in the sidebar also offer View/Create Child when selected. **Left-dragging** empty space pans; left-dragging a node repositions it. Left-click alone does not open menus or create contracts. The sidebar-wide +Standalone/+Child and header New Contract buttons have been removed. Press Escape to dismiss a canvas menu. Keyboard users can open the context menu using Shift+F10 or the Context Menu key when focused on the canvas or node. The `uses: {name,version}` relation is set when a child is created, with YAML schema unchanged.
-
-## Saved drafts and GitHub PR publishing
-
-Drafts are automatically saved to `localStorage` under `contract-designer.contracts.v1`, including imported, new, edited and deleted contracts. Refresh restores them; 'Reset samples' prompts for confirmation and replaces saved drafts. Drafts are per-browser/profile and may be deleted if site data is cleared. Export YAML for portable backups. Canvas positions are stored separately.
-
-To publish a **new contract version**, enter a fine-grained GitHub token into the editor's Save to GitHub panel. Grant **Contents: Read and Write** and **Pull requests: Read and Write** on `robin-bajaj/cdo-semantic-governance`. The browser uses the GitHub REST API to check the target filename on `main`, create a feature branch, commit the YAML to `contracts/<name_with_underscores>_v<version>.yml`, and open a PR targeting `main`. Existing version files are deliberately blocked to protect published contracts. The token is held only in React state until refresh, not stored or copied into any URL. A network failure after branch creation may leave a branch without a PR and must be handled manually.
-
-Local structural checks run before publishing; the governance repo's Python contract validator/CI and human review remain authoritative. Browser-side token usage is appropriate only for a trusted local deployment; for multi-user/production use, replace it with a server-side GitHub App/OAuth flow with short-lived scoped credentials. Browser network restrictions or repository CORS settings can prevent API requests.
-
-Run `npm test` and `npm run build` after pulling the changes.
-
-## GitHub contract registry sync
-
-The designer reads approved YAML from `robin-bajaj/cdo-semantic-governance/contracts/` on the **main** branch through GitHub's public REST API, automatically at startup and when the user clicks **Sync from GitHub** in the sidebar. Newly added contracts are shown in the canvas and inheritance tree according to their YAML `uses.name` and `uses.version` references. New version numbers are distinct nodes.
-
-A three-way merge uses the last imported GitHub snapshot (saved in browser localStorage) and original seeded sample definitions as baselines. Matching unchanged local contracts can be refreshed; locally modified contracts are **not overwritten**. Locally created contracts absent from GitHub are never deleted during sync. The sidebar shows counts of added, updated and preserved contracts. Imported YAML is subsequently editable as a local draft; changes still require the existing Save to GitHub (PR) action to publish.
-
-Only merged files on governance `main` are displayed, not contracts pending in pull requests. GitHub availability and API rate limits may affect synchronization. For private repositories, use the existing GitHub token field in an editor and press Sync from GitHub; never store access tokens in localStorage.
+The prototype uses direct browser calls and a page-memory fine-grained token. For a multi-user production deployment, implement a GitHub App or short-lived server-issued credentials. Requests can fail due to network conditions, CORS, GitHub rate limits or CDN lag; an error is displayed and the last successful GitHub snapshot remains visible.
