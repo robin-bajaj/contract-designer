@@ -13,7 +13,7 @@ Open the local URL printed by Vite (usually `http://localhost:5173`).
 
 ## Features
 
-- Contract explorer with parent/child lineage links and search
+- Interactive parent/child lineage canvas with draggable cards, pan, zoom, fit-to-view, reset, and search
 - Create standalone or child contracts
 - Edit standalone attributes and simple metrics
 - Select inherited attributes/metrics from a version-pinned parent
@@ -25,7 +25,7 @@ Open the local URL printed by Vite (usually `http://localhost:5173`).
 
 The project supports the repository's logical contract YAML shapes: `name`, integer `version`, `attributes`, `metrics`, and child `uses/include`. It intentionally avoids treating generic dbt model `contract.enforced` as equivalent to this logical CDO contract format.
 
-The contract hierarchy and edits live **in browser memory** only: reload resets to the embedded examples. Use **Export YAML** to save each edited file. No direct GitHub write, authentication, autosave, repository connection, or backend validation is included. Local validation is only a preflight: the existing Python `contract_registry` validator and federated CI remain authoritative. The UI's standalone metric editor currently supports simple SUM/COUNT metrics over named attributes. For existing sophisticated definitions, avoid overwriting unsupported fields without a round-trip fidelity test.
+Contract definitions and edits live **in browser memory** only: reload resets to the embedded examples. Canvas card positions are saved separately in browser localStorage and can be reset from the canvas toolbar; the layout never modifies contract YAML. Use **Export YAML** to save each edited file. No direct GitHub write, authentication, autosave, repository connection, or backend validation is included. Local validation is only a preflight: the existing Python `contract_registry` validator and federated CI remain authoritative. The UI's standalone metric editor currently supports simple SUM/COUNT metrics over named attributes. For existing sophisticated definitions, avoid overwriting unsupported fields without a round-trip fidelity test.
 
 Import the YAML files from `cdo-semantic-governance/contracts/` to edit. Keep filenames such as `cdo_position_v1.yml`; export filenames currently use underscores based on contract names, then raise PRs in the governance repository for review. Do not commit changes to published contract versions in place unless your governance process permits it; prefer a new version.
 
@@ -43,3 +43,16 @@ git push -u origin main
 ```
 
 The frontend has **no runtime dependency on the other two repositories**. A later integration can read contract YAML through a controlled backend/API and create reviewed PRs, while keeping the GitHub YAML registry the source of truth.
+
+## Interactive canvas
+
+Drag contracts to reposition, drag empty canvas space to pan, zoom using the toolbar or scroll wheel, use Fit to center all contracts, or Reset positions to restore the automatic layout. Clicking a card opens the existing editor. Node coordinates are UI preferences only and never become part of exported governance YAML.
+
+## Verification
+
+```bash
+npm test
+npm run build
+```
+
+The layout tests use Node's built-in test runner. The build requires installed npm dependencies.
