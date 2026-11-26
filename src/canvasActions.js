@@ -1,8 +1,6 @@
-/** Resolve click actions without turning drag gestures into accidental creation. */
-export function canvasTapAction(kind, moved, contract = null) {
-  if (moved) return 'none'
+/** Right-click context action by target. Left clicks are reserved for drag/pan. */
+export function canvasContextAction(kind, contract = null) {
   if (kind === 'pan') return 'create-standalone-menu'
-  if (kind === 'node' && contract?.uses) return 'view'
   if (kind === 'node' && contract) return 'contract-menu'
   return 'none'
 }
