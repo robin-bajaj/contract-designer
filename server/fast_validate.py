@@ -58,33 +58,37 @@ def validate_payload(payload: object) -> dict:
     if not team:
         raise InputError("Only Team A and Team C models can be validated")
     source = payload.get("sourceModel")
+    stage_only = payload.get("validationScope") == "staging"
     semantic = payload.get("semanticName")
     mode = payload.get("sourceMode")
-    if not all(isinstance(x, str) and IDENTIFIER.fullmatch(x) for x in (source, semantic)):
+    identifiers = (source,) if stage_only else (source, semantic)
+    if not all(isinstance(x, str) and IDENTIFIER.fullmatch(x) for x in identifiers):
         raise InputError("Invalid source or semantic model identifier")
     if mode not in ("new", "existing"):
         raise InputError("Invalid source model mode")
     yaml_text = payload.get("yamlText")
     sql = payload.get("sourceSql")
-    if not isinstance(yaml_text, str) or not yaml_text.strip() or len(yaml_text) > 80_000:
+    if not stage_only and (not isinstance(yaml_text, str) or not yaml_text.strip() or len(yaml_text) > 80_000):
         raise InputError("Missing or oversized semantic YAML")
     if mode == "new" and (not isinstance(sql, str) or not sql.strip() or len(sql) > 40_000):
         raise InputError("New staging SQL is required (maximum 40 KB)")
     if mode == "existing" and sql is not None:
         raise InputError("Existing source model must be loaded from the repository")
-    try:
-        import yaml
-        parsed = yaml.safe_load(yaml_text)
-    except Exception as exc:
-        raise InputError(f"Invalid YAML: {exc}") from exc
-    models = parsed.get("models") if isinstance(parsed, dict) else None
-    if (not isinstance(models, list) or len(models) != 1 or
-            not isinstance(models[0], dict) or models[0].get("name") != source or
-            (models[0].get("semantic_model") or {}).get("name") != semantic):
-        raise InputError("YAML must define exactly the selected source and semantic model")
+    if not stage_only:
+        try:
+            import yaml
+            parsed = yaml.safe_load(yaml_text)
+        except Exception as exc:
+            raise InputError(f"Invalid YAML: {exc}") from exc
+        models = parsed.get("models") if isinstance(parsed, dict) else None
+        if (not isinstance(models, list) or len(models) != 1 or
+                not isinstance(models[0], dict) or models[0].get("name") != source or
+                (models[0].get("semantic_model") or {}).get("name") != semantic):
+            raise InputError("YAML must define exactly the selected source and semantic model")
     return {
         "team": team, "source": source, "semantic": semantic, "mode": mode,
-        "yaml": yaml_text, "sql": sql if mode == "new" else None,
+        "yaml": None if stage_only else yaml_text, "sql": sql if mode == "new" else None,
+        "stage_only": stage_only,
     }
 
 
@@ -119,7 +123,7 @@ def validate_dbt(payload: object, *, runner=run_command) -> dict:
             steps.append({"name": "Load GitHub project and CDO registry", "status": "passed"})
             yaml_path = project / "models" / "semantic_models" / data["team"] / (data["semantic"] + ".yml")
             sql_path = project / "models" / "staging" / data["team"] / (data["source"] + ".sql")
-            if yaml_path.exists():
+            if not data["stage_only"] and yaml_path.exists():
                 raise InputError(f"{yaml_path.name} already exists on main; create a new semantic model name")
             if data["mode"] == "new":
                 if sql_path.exists():
@@ -128,12 +132,13 @@ def validate_dbt(payload: object, *, runner=run_command) -> dict:
                 sql_path.write_text(data["sql"], encoding="utf-8")
             elif not sql_path.is_file():
                 raise InputError(f"Existing source model {data['source']} is not in this team's staging folder")
-            yaml_path.parent.mkdir(parents=True, exist_ok=True)
-            yaml_path.write_text(data["yaml"], encoding="utf-8")
+            if not data["stage_only"]:
+                yaml_path.parent.mkdir(parents=True, exist_ok=True)
+                yaml_path.write_text(data["yaml"], encoding="utf-8")
             profiles = project / ".ci"
             profiles.mkdir(exist_ok=True)
             (profiles / "profiles.yml").write_text(PROFILE, encoding="utf-8")
-            steps.append({"name": "Apply unsaved SQL and semantic YAML", "status": "passed"})
+            steps.append({"name": "Apply unsaved staging SQL" if data["stage_only"] else "Apply unsaved SQL and semantic YAML", "status": "passed"})
             env = os.environ.copy()
             env["PYTHONPATH"] = str(gov / "src") + os.pathsep + env.get("PYTHONPATH", "")
             runner("CDO registry validation",
@@ -155,7 +160,8 @@ def validate_dbt(payload: object, *, runner=run_command) -> dict:
             steps.append({"name": "dbt Core parse", "status": "passed"})
             if not (project / "target" / "manifest.json").is_file():
                 raise StepFailure("dbt Core parse", "dbt parse completed without a manifest.json")
-            return {"ok": True, "steps": steps, "log": output, "mode": "parse-only"}
+            return {"ok": True, "steps": steps, "log": output, "mode": "parse-only",
+                    "scope": "staging" if data["stage_only"] else "full-draft"}
         except StepFailure as exc:
             steps.append({"name": exc.step, "status": "failed"})
             return {"ok": False, "steps": steps, "log": exc.output, "error": f"{exc.step} failed", "mode": "parse-only"}
@@ -166,7 +172,7 @@ def validate_dbt(payload: object, *, runner=run_command) -> dict:
 
 class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
-        if self.path != "/api/validate/fast":
+        if self.path not in ("/api/validate/fast", "/api/validate/staging"):
             self.send_error(404)
             return
         try:
@@ -178,6 +184,10 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             payload = json.loads(self.rfile.read(count))
+            if self.path == "/api/validate/staging":
+                if not isinstance(payload, dict):
+                    raise ValueError("Expected object")
+                payload["validationScope"] = "staging"
         except (ValueError, UnicodeError):
             self.send_error(400, "Invalid JSON")
             return
