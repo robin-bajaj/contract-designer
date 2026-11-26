@@ -11,6 +11,8 @@ export function createEmptyTeamModel(role, sourceModel = '') {
   const team = teamFolder(role)
   return {
     sourceModel,
+    sourceMode: 'new',
+    sourceSql: '',
     semanticName: '',
     description: '',
     group: `lob_${team}`,
@@ -45,8 +47,11 @@ export function chooseContract(draft, contractKey, registry) {
 export function validateTeamDraft(draft, role, registry, availableSourceModels) {
   const errors = []
   try { teamFolder(role) } catch { errors.push('Unknown team role') }
-  if (!SQL_IDENTIFIER.test(draft.sourceModel || '') || !availableSourceModels.includes(draft.sourceModel))
-    errors.push('Choose an existing team-owned dbt SQL source model.')
+  if (!SQL_IDENTIFIER.test(draft.sourceModel || '')) errors.push('Source dbt model name must be a lowercase SQL identifier.')
+  if (!['new','existing'].includes(draft.sourceMode)) errors.push('Choose an existing or new SQL source model.')
+  if (draft.sourceMode === 'existing' && !availableSourceModels.includes(draft.sourceModel)) errors.push('Select an existing team SQL source model.')
+  if (draft.sourceMode === 'new' && availableSourceModels.includes(draft.sourceModel)) errors.push('This SQL source model already exists. Choose a new name or use existing source mode.')
+  if (draft.sourceMode === 'new' && !nonblank(draft.sourceSql)) errors.push('Provide SQL for the new dbt source model.')
   if (!SQL_IDENTIFIER.test(draft.semanticName || '')) errors.push('Semantic model name must use lowercase letters, digits and underscores.')
   if (!nonblank(draft.description)) errors.push('Provide a semantic model description.')
   const owned = draft.columns || []
@@ -133,6 +138,11 @@ export function buildTeamModelDocument(draft, role, registry, availableSourceMod
     ...(m.description?{description:m.description}:{}),
   }))
   return {version:2,models:[model]}
+}
+
+export function teamSourcePath(role, sourceModel) {
+  if (!SQL_IDENTIFIER.test(sourceModel || '')) throw Error('Invalid SQL source model name')
+  return `models/staging/${teamFolder(role)}/${sourceModel}.sql`
 }
 
 export function teamModelPath(role, semanticName) {
