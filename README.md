@@ -166,3 +166,19 @@ The temporary directory is deleted after validation. Nothing is committed, publi
 **Development/POC only.** The backend binds loopback (`127.0.0.1:8765`), has a payload limit, validates identifier/path inputs, sets timeouts and limits concurrent checks, and never persists credentials. However, **dbt macros and Jinja can execute Python code**. The temporary checkout alone is **not** a security sandbox. Do not expose this API on a network or accept SQL/YAML from untrusted users. Real production integration requires SSO, role authorization, sandboxed worker containers with restricted network/filesystem access, rate limiting, artifact retention policies, and a controlled GitHub App. This backend does not constitute live dbt Cloud/Studio integration.
 
 The existing federated CI pins a reviewed governance commit. This local preview uses governance `main` for the most recent approved CDO contracts. CI remains authoritative if its pinned compiler differs. Use `npm test` for frontend checks and `npm run test:api` for mock subprocess backend tests.
+
+## Live validation while typing staging SQL
+
+Team A/C → **Create Semantic Model → Create a new SQL model** now validates automatically while typing. Enter a valid staging SQL model name and SQL; after **1.4 seconds without a change**, the app calls `POST /api/validate/staging` through the same-origin Vite proxy.
+
+- **Gray clock:** no SQL yet, or waiting for typing to pause
+- **Blue spinner:** current unsaved SQL is being checked
+- **Green tick:** the CDO compiler and dbt Core **parse** succeeded for the current SQL draft
+- **Red cross:** the backend returned a compilation/parsing failure; expand the details to inspect errors
+- **Amber warning:** backend unavailable or too busy; this is **not** an invalid SQL result
+
+Changing SQL or the model name invalidates the old status immediately. In-flight browser requests are aborted, and response signatures prevent stale results from replacing the latest draft. The staging-only endpoint does **not** require semantic model YAML to be finished, nor does it publish a PR or require a GitHub token.
+
+**This is a dbt parsing check, not a SQL execution check.** dbt parse can pass even when SQL syntax would later fail in PostgreSQL, because it does not execute or fully validate physical SQL. A true SQL-executable tick requires a database-connected run/build. Do not treat a green parse tick as proof of physical columns or data types.
+
+The existing **Validate Staging (dbt Core)** button in the full semantic model form remains available for a combined SQL/YAML check. Start the API with `npm run dev:api` and the React app with `npm run dev` as documented above. Automatic validation creates temporary checkouts and can be slow if GitHub is unavailable; it is a local POC, not a shared production service.
