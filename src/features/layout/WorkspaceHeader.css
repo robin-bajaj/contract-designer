@@ -1,0 +1,5 @@
+.workspace-header-actions{display:flex;align-items:center;gap:12px}
+.workspace-signout{border:1px solid #ffffff80;background:#ffffff16;color:#fff;border-radius:6px;padding:8px 12px;font-size:12px;font-weight:650;display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.workspace-signout:hover,.workspace-signout:focus-visible{background:#ffffff2e}
+@media(max-width:900px){.workspace-header .tagline{display:none}}
+@media(max-width:550px){.workspace-header{padding:0 14px;gap:12px}.workspace-header .brand{font-size:15px;gap:8px}.workspace-header .pill{display:inline-flex;font-size:10px}.workspace-signout{padding:7px 9px;font-size:0;gap:0}.workspace-signout svg{width:17px;height:17px}}
