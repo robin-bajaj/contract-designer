@@ -1,4 +1,4 @@
-import { metricAggregationError } from './dbtOptions'
+import { metricAggregationError } from './dbtOptions.js'
 
 export const initialContracts = [
   {
