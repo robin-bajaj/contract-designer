@@ -102,3 +102,19 @@ The workspace resolves each model's `config.meta.uses.name` + `version` against 
 - Direct source link to the authored YAML in GitHub
 
 **Important:** This is authored YAML metadata, not the output of the CDO compiler and not live dbt Cloud state. The page reports missing contract/version references rather than guessing a match. Validation, compilation and actual database contract enforcement remain in the existing CI/release workflows. The team role selector is UI-only and must not be relied on for access control.
+
+## Create team semantic models from scratch
+
+The **Team A** and **Team C** workspaces now have **Create Semantic Model**. The form can:
+
+1. Author a **new dbt SQL model** in `models/staging/<team>/<name>.sql`, or reference an existing team-owned staging SQL model.
+2. Define the semantic model name and description.
+3. Optionally select a versioned, approved CDO logical contract and opt into inherited attributes and metrics, with team aliases, entities and dimensions.
+4. Add team-owned SQL columns and simple metrics using the current dbt/PostgreSQL editor options.
+5. Preview/download native dbt properties YAML and propose it to `models/semantic_models/<team>/<semantic_name>.yml` through a GitHub **pull request**.
+
+If SQL is new, the publishing operation adds **both SQL and YAML** in the same feature branch and PR. Publishing refuses to overwrite existing files. Local structural validation is advisory; the federated dbt project's CDO inheritance compiler, dbt parser, and dbt build checks remain the authoritative quality gates. A new SQL model must have columns consistent with the inherited and team-owned field declarations.
+
+A fine-grained GitHub token with Contents and Pull Requests read/write permissions on `robin-bajaj/federated-semantic-poc` is entered into the browser for PR creation and is not persisted. This remains **prototype-only authoring**, not authenticated, server-side authorization, or live dbt Cloud execution. Before production, replace browser tokens with a GitHub App + server-enforced role permissions and introduce full browser end-to-end tests. Selecting an existing SQL model already described by another semantic YAML may cause dbt configuration conflicts; the team must review these in CI.
+
+Generated models become visible in the Team workspace only after the PR merges to federated `main` and the user refreshes discovery.
