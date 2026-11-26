@@ -37,12 +37,12 @@ function App() {
   const updateField = (key, value) => update(c => ({ ...c, [key]: value }))
   const updateItem = (kind, index, key, value) => update(c => { c[kind][index][key] = value; return c })
   const addContract = (child, selectedParent = null) => {
-    const prefix = child ? 'cdo.new_concept' : 'new_contract'
+    const prefix = child ? `${selectedParent?.name || active?.name || 'cdo'}.new_concept` : 'new_contract'
     const base = prefix; let name = base; let suffix = 2
     while (contracts.some(c => c.name === name)) name = `${base}_${suffix++}`
     const parent = selectedParent || (active && contracts.some(c => c.id === active.id) ? active : null) || contracts.find(c => c.name === 'cdo.all') || contracts.find(c => !c.uses)
     const item = { id: name, name, version: 1, description: '', uses: child && parent ? { name: parent.name, version: parent.version } : null, include: child ? { attributes: [], metrics: [] } : null, attributes: [], metrics: [] }
-    setContracts(old => [...old, item]); setActiveId(item.id); setView('edit'); setNotice('New draft created. Export YAML to save it in a repository.'); setValidation(null)
+    setContracts(old => [...old, item]); setActiveId(item.id); setView('edit'); setShowYaml(true); setNotice('New draft created. Export YAML to save it in a repository.'); setValidation(null)
   }
   const removeContract = id => {
     if (contracts.some(c => c.uses?.name === contracts.find(x => x.id === id)?.name)) { setNotice('Cannot remove this contract: a child contract depends on it.'); return }
@@ -75,16 +75,15 @@ function App() {
         <div className="section-label">MY CONTRACTS</div>
         <div className="search"><Search size={17}/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search contracts..."/></div>
         <div className="folder-label"><FolderTree size={17}/> My Contracts</div>
-        <div className="small-actions"><button onClick={() => addContract(false)}><Plus size={13}/> Standalone</button><button onClick={() => addContract(true)}><Plus size={13}/> Child</button></div>
         <ContractExplorer contracts={contracts} search={search} activeId={activeId} onOpen={open} onRemove={removeContract} onAddChild={parent => addContract(true, parent)}/>
         <div className="sidebar-bottom"><button className="outline stretch" onClick={() => importRef.current?.click()}><Upload size={15}/> Import contract YAML</button><input ref={importRef} accept=".yml,.yaml,text/yaml" type="file" hidden onChange={importContract}/><p>Contracts loaded as local drafts. Export YAML and review it through your normal GitHub PR process.</p></div>
       </aside>
       <main className="main-content">
         {notice && <div className="notice"><CircleAlert size={16}/><span>{notice}</span><button className="icon-quiet" onClick={() => setNotice('')}><X size={15}/></button></div>}
         {view === 'canvas' ? <>
-          <div className="page-head"><h1>My Contracts</h1><div className="head-actions"><button className="primary" onClick={() => addContract(false)}><Plus size={18}/> New Contract</button><button className="outline" onClick={() => { setContracts(clone(initialContracts)); setNotice('Example contracts restored.'); setActiveId(null) }}><RotateCcw size={15}/> Reset samples</button></div></div>
-          <p className="muted">Contract lineage • click any contract to edit its definition</p>
-          <div className="graph-area"><ContractCanvas contracts={cards} onOpen={open}/></div>
+          <div className="page-head"><h1>My Contracts</h1><div className="head-actions"><button className="outline" onClick={() => { setContracts(clone(initialContracts)); setNotice('Example contracts restored.'); setActiveId(null) }}><RotateCcw size={15}/> Reset samples</button></div></div>
+          <p className="muted">Click blank canvas space to create a standalone contract. Click an existing contract for its actions.</p>
+          <div className="graph-area"><ContractCanvas contracts={cards} onOpen={open} onCreateStandalone={() => addContract(false)} onCreateChild={parent => addContract(true, parent)}/></div>
         </> : active ? <>
           <div className="editor-actions"><button className="outline" onClick={() => {setView('canvas'); setValidation(null)}}><ArrowLeft size={16}/> Back to Contracts</button><div className="head-actions"><button className="outline" onClick={() => {setShowYaml(true); window.requestAnimationFrame(() => yamlRef.current?.scrollIntoView({behavior:'smooth',block:'start'}))}}><Code2 size={16}/>View YAML</button><button className="primary" onClick={() => { const errors = validateContract(active, contracts);setValidation(errors);setNotice(errors.length ? 'Please resolve validation issues before exporting.' : 'Local structural checks passed. CI remains the authoritative contract validator.') }}><CheckCircle2 size={16}/> Validate</button><button className="primary" onClick={() => { if(currentIssues.length) {setValidation(currentIssues);setNotice('Resolve validation issues before exporting.');return} download(contractFilename(active), selectedYaml); setNotice('YAML exported. Submit it through a GitHub PR for authoritative validation.')}}><Download size={16}/> Export YAML</button></div></div>
           <div className="editor-panel">
