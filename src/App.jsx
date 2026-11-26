@@ -4,12 +4,13 @@ import { ArrowLeft, ArrowRight, CheckCircle2, ChevronDown, CircleAlert, Code2, D
 import { toContractDocument, validateContract } from './domain/contracts/contracts.js'
 import ContractCanvas from './features/canvas/ContractCanvas.jsx'
 import ContractExplorer from './features/explorer/ContractExplorer.jsx'
+import PublishPanel from './features/editor/PublishPanel.jsx'
 import { contractFilename } from './domain/contracts/contractTree.js'
 import { DATA_TYPES, METRIC_TYPES, SIMPLE_AGGREGATIONS } from './domain/contracts/dbtOptions.js'
 
 import { fetchGovernanceContracts } from './services/github/githubRegistry.js'
 import { restoreRegistryBaseline, persistRegistryBaseline } from './services/storage/registryCache.js'
-import { publishContractPR, GOVERNANCE_REPO, registryFilename } from './services/github/githubPublish.js'
+import { publishContractPR, GOVERNANCE_REPO } from './services/github/githubPublish.js'
 import './styles.css'
 
 const clone = value => JSON.parse(JSON.stringify(value))
@@ -129,12 +130,8 @@ function App() {
           <div className="graph-area"><ContractCanvas contracts={cards} onOpen={open} onCreateStandalone={() => addContract(false)} onCreateChild={parent => addContract(true, parent)}/></div>
         </> : active ? <>
           <div className="editor-actions"><button className="outline" onClick={() => {setView('canvas'); setValidation(null)}}><ArrowLeft size={16}/> Back to Contracts</button><div className="head-actions"><button className="outline" onClick={() => {setShowYaml(true); window.requestAnimationFrame(() => yamlRef.current?.scrollIntoView({behavior:'smooth',block:'start'}))}}><Code2 size={16}/>View YAML</button><button className="primary" onClick={() => { const errors = validateContract(active, contracts);setValidation(errors);setNotice(errors.length ? 'Please resolve validation issues before exporting.' : 'Local structural checks passed. CI remains the authoritative contract validator.') }}><CheckCircle2 size={16}/> Validate</button><button className="primary" onClick={() => { if(currentIssues.length) {setValidation(currentIssues);setNotice('Resolve validation issues before exporting.');return} download(contractFilename(active), selectedYaml); setNotice('YAML exported. Submit it through a GitHub PR for authoritative validation.')}}><Download size={16}/> Export YAML</button></div></div>
-          <div className="github-publish-panel">
-            <div><strong>Save to GitHub for review</strong><p className="muted">Target repository: {GOVERNANCE_REPO}. Path: {active && /^[a-z][a-z0-9_.]*$/.test(active.name) && Number.isInteger(Number(active.version)) && Number(active.version) > 0 ? registryFilename(active) : 'Complete a valid contract name/version first'}. Creates a new branch and pull request; never writes directly to main or overwrites a released contract version. Unpublished editor changes are temporary; export YAML for backup.</p></div>
-            <div className="github-publish-controls"><input type="password" autoComplete="off" value={githubToken} onChange={e => setGithubToken(e.target.value)} placeholder="GitHub fine-grained token (not stored)" aria-label="GitHub access token"/><button className="primary" onClick={publish} disabled={publishing || !githubToken.trim()}><GitBranch size={16}/>{publishing ? 'Creating PR...' : 'Save to GitHub (PR)'}</button></div>
-            <small className="muted">Token needs Contents: Read/Write and Pull requests: Read/Write on cdo-semantic-governance. Token stays in page memory and is not saved in localStorage.</small>
-            {publishedPR && <p><a href={publishedPR.url} target="_blank" rel="noopener noreferrer">Open pull request #{publishedPR.number}</a></p>}
-          </div>
+          <PublishPanel contract={active} token={githubToken} onTokenChange={setGithubToken} onPublish={publish}
+            isPublishing={publishing} pullRequest={publishedPR}/>
           <div className="editor-panel">
             <div className="editor-intro"><span className="eyebrow">{active.uses ? 'CHILD CONTRACT' : 'STANDALONE CONTRACT'}</span><p>{active.uses ? 'Select definitions to inherit from a versioned parent contract' : 'Define reusable enterprise business attributes and governed metrics'}</p></div>
             <h3 className="section-title">Contract Details</h3>
