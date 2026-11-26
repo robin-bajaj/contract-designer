@@ -85,3 +85,20 @@ For enterprise use, replace this with an identity provider (e.g., company SSO th
 All three demo roles (CDO, Team A and Team C) use a single `src/features/layout/WorkspaceHeader.jsx` instance rendered by `RoleGateway`. Its branding, subtitle, placement, role indicator, and sign-out action are consistent across profiles; only the role label changes. The CDO contract designer and both team pages render content below the shared header and do not own another header.
 
 Role selection is still a UI demonstration rather than server-enforced authentication.
+
+## Team A and Team C semantic model discovery
+
+Team workspaces are **read-only** and automatically load dbt-authored models from the `main` branch of `robin-bajaj/federated-semantic-poc`:
+- Team A: `models/semantic_models/team_a/*.yml` and `*.yaml`
+- Team C: `models/semantic_models/team_c/*.yml` and `*.yaml`
+
+The GitHub directory listing discovers files (without hardcoding a single YAML filename), then raw GitHub reads load the YAML. Requests use jsDelivr as a fallback for rate limiting/failed raw reads. Only models with an enabled `semantic_model` or an authored `config.meta.uses` declaration are listed. A refresh button reloads current GitHub `main`; no changes are written by Team A/C.
+
+The workspace resolves each model's `config.meta.uses.name` + `version` against the approved `cdo-semantic-governance/contracts/` main-branch registry. It displays:
+- CDO-adopted attributes and metrics from `config.meta.include`, together with canonical types, descriptions and metric expressions
+- Team-specific aliases, entities, dimensions and granularity
+- Team-owned `columns` and `metrics` in separate sections
+- dbt model name, semantic model name, group, access, and whether native `contract.enforced` is configured
+- Direct source link to the authored YAML in GitHub
+
+**Important:** This is authored YAML metadata, not the output of the CDO compiler and not live dbt Cloud state. The page reports missing contract/version references rather than guessing a match. Validation, compilation and actual database contract enforcement remain in the existing CI/release workflows. The team role selector is UI-only and must not be relied on for access control.
