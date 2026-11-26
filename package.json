@@ -8,7 +8,9 @@
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",
     "test": "node --test",
-    "check": "npm test && npm run build"
+    "check": "npm test && npm run build",
+    "dev:api": "python3 -m server.fast_validate",
+    "test:api": "python3 -m unittest discover -s server -p 'test_*.py'"
   },
   "dependencies": {
     "react": "^19.0.0",
