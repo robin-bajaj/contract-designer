@@ -61,6 +61,7 @@ export function validateTeamDraft(draft, role, registry, availableSourceModels) 
   for (const column of owned) {
     if (!SQL_IDENTIFIER.test(column.name || '')) errors.push(`Invalid team column name: ${column.name}`)
     if (!DATA_TYPES.includes(column.data_type)) errors.push(`Unsupported SQL type for ${column.name}`)
+    if (!['none','primary','foreign','time','categorical'].includes(column.semanticType || 'none')) errors.push(`Invalid column semantic annotation for ${column.name}`)
   }
   const selectedAttrs = (draft.attributes || []).filter(x => x.selected)
   const selectedMetrics = (draft.inheritedMetrics || []).filter(x => x.selected)
@@ -137,7 +138,13 @@ export function buildTeamModelDocument(draft, role, registry, availableSourceMod
     }
   }
   if (draft.aggTimeDimension) model.agg_time_dimension=draft.aggTimeDimension
-  model.columns=draft.columns.map(c=>({name:c.name,data_type:c.data_type,...(c.description?{description:c.description}:{})}))
+  model.columns=draft.columns.map(c=>{
+    const out={name:c.name,data_type:c.data_type,...(c.description?{description:c.description}:{})}
+    if(c.semanticType==='primary'||c.semanticType==='foreign') out.entity={type:c.semanticType}
+    if(c.semanticType==='time') {out.dimension={type:'time'};out.granularity='day'}
+    if(c.semanticType==='categorical') out.dimension={type:'categorical'}
+    return out
+  })
   model.metrics=draft.metrics.map(m=>({
     name:m.name,type:'simple',agg:m.agg,expr:m.expr,
     ...(m.description?{description:m.description}:{}),
