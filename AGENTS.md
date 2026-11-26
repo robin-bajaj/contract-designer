@@ -1,26 +1,22 @@
-# Contract Designer — repository instructions
+# Contract Designer repository conventions
 
-## Purpose
-Standalone, product-neutral React/Vite frontend for designing logical business contracts and inspecting inheritance lineage. This is a separate repo from `robin-bajaj/cdo-semantic-governance` and `robin-bajaj/federated-semantic-poc`.
+## Scope and ownership
 
-## Contract data model
-- Parent definition: `name`, integer `version`, `attributes` (`name`, `data_type`, `description`), `metrics` (`name`, `type`, `agg`, `expr`, optional `fill_nulls_with`).
-- Child definition: `name`, integer `version`, `uses: { name, version }`, `include: { attributes, metrics }`.
-- Example hierarchy: `cdo.all -> cdo.position` and `cdo.all -> cdo.counterparty`.
-- Keep compatibility with the authoritative governance YAML in `cdo-semantic-governance/contracts/`. Never export UI positions, visual state or extra arbitrary metadata inside contract YAML.
-- Team semantic entity aliases and CDO composition selections are separate from the logical business contract editor.
+The catalog belongs to `robin-bajaj/cdo-semantic-governance/contracts/` on `main`. UI drafts, canvas coordinates and browser preferences must never be represented as approved GitHub contracts or embedded into logical contract YAML. New versions are submitted by PR and validated by the governance repository CI; never modify released versions in place.
 
-## Architecture
-- `src/contracts.js`: seeded example contracts, YAML serializer and frontend preflight validation.
-- `src/main.jsx`: explorer, editor, import/export and app state.
-- `src/ContractCanvas.jsx`: draggable, zoomable and pannable lineage canvas.
-- `src/lineage.js`: pure deterministic lineage layout; `src/lineage.test.js`: Node tests.
-- `src/styles.css`: existing green-and-white design.
+## Organization
 
-## Operational safety
-- Contracts remain local browser drafts until YAML export. Only card position preferences use localStorage.
-- No authentication, GitHub write, backend persistence or authoritative server validation exists yet.
-- Do not modify governance or federated repositories without explicit approval.
-- Python contract registry validation and federated CI remain authoritative.
-- Run `npm test` and `npm run build` when changing code, and report unrun checks accurately.
-- Make incremental changes through reviewable pull requests.
+- `src/main.jsx`: bootstraps React only.
+- `src/App.jsx`: assembles workspace and editor behavior.
+- `src/domain/contracts/`: pure serialization, validation and version-aware inheritance functions.
+- `src/features/canvas/`: layout and graph interactions.
+- `src/features/explorer/`: sidebar component.
+- `src/features/editor/`: editor sub-components.
+- `src/services/github/`: GitHub registry and PR API interactions.
+- `src/services/storage/`: cached approved GitHub registry snapshot only.
+
+Use PascalCase for React components, camelCase for non-component files, and colocate `.test.js` files with their modules. Preserve the existing YAML shape (`name`, `version`, `attributes`, `metrics`, `uses`, `include`). Use name+version to resolve every dependency.
+
+## Release discipline
+
+Run `npm ci && npm run check` and review CI before merging. No access token may enter browser storage, URLs, logs, or committed files. Direct browser GitHub token publishing is a prototype limitation and must be replaced with authenticated server-side operations before multi-user production use. Keep changes scoped to this repository unless an independent governance PR is explicitly requested.
