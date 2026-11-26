@@ -111,7 +111,7 @@ def run_command(step: str, argv: list[str], cwd: Path, env: dict | None = None, 
 
 def check_staging_sql(sql: str) -> None:
     """Fast PostgreSQL syntax check before cloning. Jinja-enabled SQL is checked by dbt."""
-    if re.match(r"(?is)^\\s*select\\s+from\\b", sql):
+    if re.match(r"(?is)^\s*select\s+from\b", sql):
         raise InputError("Staging SQL syntax error: SELECT must have an expression before FROM.")
     if "{{" in sql or "{%" in sql or "{#" in sql:
         return  # SQLGlot cannot safely interpret dbt Jinja without compilation.
