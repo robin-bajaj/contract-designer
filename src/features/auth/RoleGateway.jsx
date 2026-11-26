@@ -1,8 +1,8 @@
 import React, { useState } from 'react'
-import { LogOut } from 'lucide-react'
 import ContractDesigner from '../../App.jsx'
 import LoginPage from './LoginPage.jsx'
 import TeamWorkspace from './TeamWorkspace.jsx'
+import WorkspaceHeader from '../layout/WorkspaceHeader.jsx'
 import { canAccessDesigner, isKnownRole } from './roles.js'
 import './auth.css'
 
@@ -11,12 +11,8 @@ export default function RoleGateway() {
   const [role, setRole] = useState(null)
   const signOut = () => setRole(null)
   if (!isKnownRole(role)) return <LoginPage onLogin={setRole}/>
-  if (!canAccessDesigner(role)) return <TeamWorkspace role={role} onLogout={signOut}/>
-  return <div className="role-cdo-shell">
-    <ContractDesigner />
-    <div className="role-cdo-controls">
-      <span>CDO workspace · Demo</span>
-      <button type="button" onClick={signOut}><LogOut size={14}/> Sign out</button>
-    </div>
+  return <div className="role-workspace-shell">
+    <WorkspaceHeader role={role} onLogout={signOut}/>
+    {canAccessDesigner(role) ? <ContractDesigner/> : <TeamWorkspace role={role}/>}
   </div>
 }
