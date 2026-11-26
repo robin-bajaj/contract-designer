@@ -76,9 +76,10 @@ test('independent semantic model can be authored with team-owned columns and met
   draft.sourceSql='select 1::integer as num'
   draft.semanticName='fi_custom'
   draft.description='Independent FI model'
-  draft.columns=[{name:'num',data_type:'integer',description:''}]
+  draft.columns=[{name:'num',data_type:'integer',description:'',semanticType:'primary'}]
   draft.metrics=[{name:'fi_count',agg:'count',expr:'num',description:''}]
   assert.deepEqual(validateTeamDraft(draft,'team-c',initialContracts,[]),[])
   const doc=buildTeamModelDocument(draft,'team-c',initialContracts,[])
   assert.ok(!doc.models[0].config.meta)
+  assert.deepEqual(doc.models[0].columns[0].entity,{type:'primary'})
 })
