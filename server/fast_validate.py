@@ -75,7 +75,7 @@ def validate_payload(payload: object) -> dict:
     try:
         import yaml
         parsed = yaml.safe_load(yaml_text)
-    except (ImportError, Exception) as exc:
+    except Exception as exc:
         raise InputError(f"Invalid YAML: {exc}") from exc
     models = parsed.get("models") if isinstance(parsed, dict) else None
     if (not isinstance(models, list) or len(models) != 1 or
