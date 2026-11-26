@@ -1,19 +1,19 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { canvasTapAction, positionCanvasMenu } from './canvasActions.js'
+import { canvasContextAction, positionCanvasMenu } from './canvasActions.js'
 
-test('plain canvas click offers standalone contract creation', () => {
-  assert.equal(canvasTapAction('pan', false), 'create-standalone-menu')
+test('right-clicking plain canvas offers standalone contract creation', () => {
+  assert.equal(canvasContextAction('pan'), 'create-standalone-menu')
 })
-test('dragging to pan or reposition never opens a creation menu', () => {
-  assert.equal(canvasTapAction('pan', true), 'none')
-  assert.equal(canvasTapAction('node', true, { uses: null }), 'none')
+test('right-clicking standalone contract offers view and create-child choices', () => {
+  assert.equal(canvasContextAction('node', { id:'all', uses: null }), 'contract-menu')
 })
-test('clicking standalone contract offers view and child creation choices', () => {
-  assert.equal(canvasTapAction('node', false, { id:'all', uses: null }), 'contract-menu')
+test('right-clicking child also offers contract actions', () => {
+  assert.equal(canvasContextAction('node', { id:'position', uses:{name:'cdo.all',version:1} }), 'contract-menu')
 })
-test('clicking a child contract opens its editor directly', () => {
-  assert.equal(canvasTapAction('node', false, { id:'position', uses:{name:'cdo.all',version:1} }), 'view')
+test('unrecognized target does not trigger a context action', () => {
+  assert.equal(canvasContextAction('node'), 'none')
+  assert.equal(canvasContextAction('toolbar'), 'none')
 })
 test('context menus are constrained to canvas edges', () => {
   const rect = {left:100,top:100,width:800,height:450}
