@@ -14,3 +14,32 @@
 .canvas-card:active{cursor:grabbing;box-shadow:0 8px 25px #19895535}.canvas-card:focus-visible{outline:3px solid #1a9c64;outline-offset:3px}
 .canvas-mode{position:absolute;bottom:12px;left:14px;border:1px solid #e0e9e3;border-radius:20px;padding:6px 10px;background:#ffffffdf;color:#6b8375;font-size:11px;display:flex;align-items:center;gap:6px;pointer-events:none}
 @media(max-width:850px){.canvas-hint{display:none}.lineage-wrapper{height:500px}}
+
+
+/* Version-aware explorer: indentation reflects actual contract inheritance. */
+.contract-nav{margin-top:15px}
+.tree-item{margin:1px 0;position:relative;padding-left:calc(var(--tree-depth,0)*17px);border-radius:6px;min-height:39px}
+.tree-item .nav-link{padding:7px 3px;gap:7px}
+.tree-item .nav-link svg{flex-shrink:0;color:#158a59}
+.tree-item .nav-link span{font-size:12px;font-weight:600}
+.tree-item .nav-link small{font-size:10px;color:#899b90;margin-left:auto}
+.tree-chevron{display:flex;align-items:center;justify-content:center;flex-shrink:0;width:20px;height:28px;padding:0;border:0;background:transparent;color:#55876b}
+.tree-chevron:disabled{cursor:default}
+.tree-dot{display:block;width:5px;height:5px;border-radius:50%;background:#b8cfc0}
+.tree-item .icon-quiet{padding:4px;flex-shrink:0}
+.tree-add{color:#169a60;opacity:0}
+.tree-item:hover .tree-add,.tree-item:focus-within .tree-add{opacity:1}
+.tree-remove{opacity:.6}
+.tree-descendants{position:relative}
+.tree-item:has(.nav-link:hover){background:#eef8f1}
+.tree-search-summary{font-size:10px;color:#82978a;padding:6px 8px}
+.empty-tree{padding:10px}
+.yaml-preview{scroll-margin-top:20px;margin-top:24px;overflow:hidden;background:#fcfffd}
+.yaml-head{gap:12px;flex-wrap:wrap;padding:14px 16px}
+.yaml-file-label{display:flex;align-items:center;gap:9px;color:#176c47}
+.yaml-file-label>div{display:flex;flex-direction:column;gap:3px}
+.yaml-file-label small{color:#6d8978;font-size:11px;font-weight:400}
+.yaml-buttons{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-left:auto}
+.yaml-buttons .outline{padding:7px 10px}
+.yaml-preview pre{background:#f8fcf9;max-height:360px;overflow:auto;white-space:pre;font-family:ui-monospace,SFMono-Regular,Consolas,Monaco,monospace;font-size:12px;line-height:1.7;tab-size:2}
+@media(max-width:800px){.tree-item{padding-left:calc(var(--tree-depth,0)*11px)}.tree-item .nav-link small{display:none}.yaml-buttons{margin-left:0}}
