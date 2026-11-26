@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import yaml from 'js-yaml'
-import { CircleAlert, FolderTree, GitBranch, RotateCcw, Upload, X } from 'lucide-react'
+import { CircleAlert, FolderTree, GitBranch, RotateCcw, Search, Upload, X } from 'lucide-react'
 import { toContractDocument, validateContract } from './domain/contracts/contracts.js'
 import ContractCanvas from './features/canvas/ContractCanvas.jsx'
 import ContractExplorer from './features/explorer/ContractExplorer.jsx'
