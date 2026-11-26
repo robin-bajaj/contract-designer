@@ -121,7 +121,7 @@ def validate_dbt(payload: object, *, runner=run_command) -> dict:
             runner("Checkout CDO registry", ["git", "clone", "--quiet", "--depth", "1", "--branch", "main",
                                             GOVERNANCE_URL, str(gov)], root, timeout=45)
             steps.append({"name": "Load GitHub project and CDO registry", "status": "passed"})
-            yaml_path = project / "models" / "semantic_models" / data["team"] / (data["semantic"] + ".yml")
+            yaml_path = (project / "models" / "semantic_models" / data["team"] / (data["semantic"] + ".yml")) if not data["stage_only"] else None
             sql_path = project / "models" / "staging" / data["team"] / (data["source"] + ".sql")
             if not data["stage_only"] and yaml_path.exists():
                 raise InputError(f"{yaml_path.name} already exists on main; create a new semantic model name")
