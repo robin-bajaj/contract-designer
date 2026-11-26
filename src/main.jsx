@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import yaml from 'js-yaml'
 import { ArrowLeft, ArrowRight, CheckCircle2, ChevronDown, CircleAlert, Code2, Download, FilePlus2, FolderTree, GitBranch, Layers, Link2, Plus, RotateCcw, Save, Search, Trash2, Upload, X } from 'lucide-react'
 import { initialContracts, toContractDocument, validateContract } from './contracts'
+import ContractCanvas from './ContractCanvas'
 import './styles.css'
 
 const clone = value => JSON.parse(JSON.stringify(value))
@@ -80,7 +81,7 @@ function App() {
         {view === 'canvas' ? <>
           <div className="page-head"><h1>My Contracts</h1><div className="head-actions"><button className="primary" onClick={() => addContract(false)}><Plus size={18}/> New Contract</button><button className="outline" onClick={() => { setContracts(clone(initialContracts)); setNotice('Example contracts restored.'); setActiveId(null) }}><RotateCcw size={15}/> Reset samples</button></div></div>
           <p className="muted">Contract lineage • click any contract to edit its definition</p>
-          <div className="graph-area"><ContractGraph contracts={cards} onOpen={open}/></div>
+          <div className="graph-area"><ContractCanvas contracts={cards} onOpen={open}/></div>
         </> : active ? <>
           <div className="editor-actions"><button className="outline" onClick={() => {setView('canvas'); setValidation(null)}}><ArrowLeft size={16}/> Back to Contracts</button><div className="head-actions"><button className="outline" onClick={() => setShowYaml(v => !v)}><Code2 size={16}/>{showYaml ? 'Hide YAML' : 'Preview YAML'}</button><button className="primary" onClick={() => { const errors = validateContract(active, contracts);setValidation(errors);setNotice(errors.length ? 'Please resolve validation issues before exporting.' : 'Local structural checks passed. CI remains the authoritative contract validator.') }}><CheckCircle2 size={16}/> Validate</button><button className="primary" onClick={() => { if(currentIssues.length) {setValidation(currentIssues);setNotice('Resolve validation issues before exporting.');return} download(`${active.name.replaceAll('.', '_')}_v${active.version}.yml`, selectedYaml); setNotice('YAML exported. Submit it through a GitHub PR for authoritative validation.')}}><Download size={16}/> Export YAML</button></div></div>
           <div className="editor-panel">
@@ -110,17 +111,4 @@ function App() {
     </div>
   </div>
 }
-function ContractGraph({contracts,onOpen}) {
-  const parents = contracts.filter(c => !c.uses)
-  const children = contracts.filter(c => !!c.uses)
-  if (!contracts.length) return <p className="muted">No contracts match your search.</p>
-  const ordered = [...parents, ...children]
-  const width = Math.max(650, ordered.length * 220 + 60)
-  const positions = Object.fromEntries(ordered.map((c,i)=>[c.id,{x:40+i*220,y:c.uses?250:42}]))
-  return <div className="graph-scroll"><div className="graph-content" style={{minWidth:width,height:475}}>
-    <svg className="connections" width={width} height="430">{children.map(c=>{const from=ordered.find(x=>x.name===c.uses.name);const a=from&&positions[from.id];const b=positions[c.id];if(!a||!b)return null;return <path key={c.id} d={`M${a.x+91} ${a.y+138} V${b.y-35} H${b.x+91} V${b.y-7}`} fill="none" stroke="#009c58" strokeWidth="2.2" markerEnd="url(#arrow)"/>})}<defs><marker id="arrow" markerWidth="7" markerHeight="7" refX="4" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6" fill="none" stroke="#009c58" strokeWidth="1.5"/></marker></defs></svg>
-    {ordered.map(c => <button key={c.id} className={`contract-card ${c.uses?'child':''}`} style={{left:positions[c.id].x,top:positions[c.id].y}} onClick={()=>onOpen(c.id)}><span className="card-emoji">{c.uses?'🔗':'📦'}</span><strong>{c.name}</strong><span className="card-badge">{c.uses?'CHILD CONTRACT':'STANDALONE CONTRACT'}</span><small>{c.uses ? `uses ${c.uses.name}` : `v${c.version} · ${c.attributes.length} attributes, ${c.metrics.length} metrics`}</small></button>)}
-  </div></div>
-}
-
 createRoot(document.getElementById('root')).render(<App/>)
