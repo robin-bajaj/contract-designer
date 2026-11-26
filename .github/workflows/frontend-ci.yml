@@ -30,6 +30,6 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install backend unit-test dependency
-        run: python -m pip install 'PyYAML>=6,<7'
+        run: python -m pip install 'PyYAML>=6,<7' 'sqlglot>=26,<29'
       - name: Test dbt Core validation API orchestration (mocked subprocesses)
         run: python -m unittest discover -s server -p 'test_*.py'
