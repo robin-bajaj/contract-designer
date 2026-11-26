@@ -43,3 +43,20 @@
 .yaml-buttons .outline{padding:7px 10px}
 .yaml-preview pre{background:#f8fcf9;max-height:360px;overflow:auto;white-space:pre;font-family:ui-monospace,SFMono-Regular,Consolas,Monaco,monospace;font-size:12px;line-height:1.7;tab-size:2}
 @media(max-width:800px){.tree-item{padding-left:calc(var(--tree-depth,0)*11px)}.tree-item .nav-link small{display:none}.yaml-buttons{margin-left:0}}
+
+
+/* Consistent metric grid with an editable description instead of fill-null column. */
+.metric-table table{min-width:1040px;table-layout:fixed}
+.metric-table th:nth-child(1){width:19%}
+.metric-table th:nth-child(2){width:12%}
+.metric-table th:nth-child(3){width:19%}
+.metric-table th:nth-child(4){width:17%}
+.metric-table th:nth-child(5){width:27%}
+.metric-table th:nth-child(6){width:6%;text-align:center}
+.metric-table td:last-child{text-align:center}
+.metric-table td:last-child .remove{min-width:33px;min-height:33px;display:inline-flex;align-items:center;justify-content:center}
+.metric-table td input,.metric-table td select{min-width:0}
+.remove{transition:background-color .15s ease,color .15s ease,transform .15s ease;background:#f7e7e8;color:#bb5862;border:1px solid #f0ced1}
+.remove:hover,.remove:focus-visible{background:#c82737;color:white;border-color:#c82737;transform:translateY(-1px)}
+.remove:focus-visible{outline:2px solid #f28a92;outline-offset:2px}
+.tree-remove:hover,.tree-remove:focus-visible{opacity:1;background:#c82737;color:#fff;border-radius:4px}

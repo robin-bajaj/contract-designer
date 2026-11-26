@@ -62,3 +62,9 @@ The layout tests use Node's built-in test runner. The build requires installed n
 The sidebar nests child contracts beneath the exact versioned parent referenced in their `uses` metadata. Expand/collapse using the chevron, and use the + icon beside a parent to create a child of that contract. Searching keeps ancestor nodes visible for context. Missing-parent drafts appear as roots rather than vanishing. Selecting a contract opens its editor with a **live YAML preview** beneath contract details; choose **View YAML** to scroll to it or **Download .yml** to export its exact contract name. Preview and export use the same `toContractDocument` serializer.
 
 These changes do not add automatic contract persistence or GitHub publishing. Changes remain browser-memory drafts until YAML export.
+
+## dbt-oriented editor controls
+
+The standalone contract editor offers PostgreSQL-compatible SQL data types (matching the current Neon/dbt environment) and supported **simple** metric aggregations: `sum`, `count`, `count_distinct`, `average`, `min`, `max`, `median`, and `sum_boolean`. These types are adapter-specific; dbt has no single universal physical SQL-type enumeration. Complex dbt metric categories (ratio, derived, cumulative, conversion) require different metadata and are deliberately not offered as if they were simple metric types. The logical CDO contract format remains separate from dbt semantic-model YAML.
+
+Metric descriptions are edited inline, and the Fill Nulls field is no longer shown. Existing imported/seeded `fill_nulls_with` values are **preserved** in exported YAML, rather than silently deleted. Live YAML preview follows the editor fields and validation at the bottom of the page.

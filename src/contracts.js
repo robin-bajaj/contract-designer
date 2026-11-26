@@ -1,3 +1,5 @@
+import { metricAggregationError } from './dbtOptions.js'
+
 export const initialContracts = [
   {
     id: 'cdo.all', name: 'cdo.all', version: 1, description: 'Enterprise business dictionary. Logical definitions only; not a dbt model.', uses: null,
@@ -57,8 +59,8 @@ export function validateContract(contract, contracts) {
     if (new Set(contract.metrics.map(m => m.name)).size !== contract.metrics.length) errors.push('Duplicate metric names are not allowed.')
     for (const m of contract.metrics) {
       if (!/^[a-zA-Z_][\w]*$/.test(m.name)) errors.push(`Invalid metric name: ${m.name}`)
-      if (!names.includes(m.expr)) errors.push(`Metric ${m.name} references missing attribute ${m.expr}.`)
-      if (m.agg === 'sum' && !['numeric', 'integer', 'bigint'].includes(contract.attributes.find(a => a.name === m.expr)?.data_type)) errors.push(`SUM metric ${m.name} requires a numeric attribute.`)
+      const metricError = metricAggregationError(m, contract.attributes)
+      if (metricError) errors.push(metricError)
     }
   }
   return errors
