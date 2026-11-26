@@ -8,7 +8,7 @@ import ContractExplorer from './ContractExplorer'
 import { contractFilename } from './contractTree'
 import { DATA_TYPES, METRIC_TYPES, SIMPLE_AGGREGATIONS } from './dbtOptions'
 
-import { fetchGovernanceContracts } from './githubRegistry.js'
+import { fetchGovernanceContracts, restoreRegistryBaseline, persistRegistryBaseline } from './githubRegistry.js'
 import { publishContractPR, GOVERNANCE_REPO, registryFilename } from './githubPublish.js'
 import './styles.css'
 
@@ -20,7 +20,7 @@ const download = (name, text, mime = 'text/yaml') => {
 }
 const toYaml = c => yaml.dump(toContractDocument(c), { noRefs: true, lineWidth: 100, sortKeys: false })
 function App() {
-  const [contracts, setContracts] = useState([])
+  const [contracts, setContracts] = useState(restoreRegistryBaseline)
   const [draftContract, setDraftContract] = useState(null)
   const [activeId, setActiveId] = useState(null)
   const [search, setSearch] = useState('')
@@ -39,6 +39,7 @@ function App() {
       const remote = await fetchGovernanceContracts(fetch, token)
       // GitHub main is the sole source for the catalog: never merge local samples or drafts.
       setContracts(remote)
+      persistRegistryBaseline(remote)
       setDraftContract(null)
       setActiveId(null)
       setView('canvas')
@@ -46,7 +47,7 @@ function App() {
       setRegistryStatus(summary)
       if (!silent) setNotice(summary)
     } catch (error) {
-      setRegistryStatus(`GitHub sync unavailable: ${error.message}`)
+      setRegistryStatus(`GitHub sync unavailable: ${error.message}. Showing last loaded GitHub snapshot, if available.`)
       if (!silent) setNotice(`GitHub sync failed: ${error.message}`)
     } finally { setSyncingRegistry(false) }
   }
