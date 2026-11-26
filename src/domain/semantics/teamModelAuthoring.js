@@ -93,6 +93,11 @@ export function validateTeamDraft(draft, role, registry, availableSourceModels) 
       else {
         if (selectedAttrs.some(a=>!resolved.attributes.some(x=>x.name===a.name))) errors.push('Unknown inherited attribute')
         if (selectedMetrics.some(m=>!resolved.metrics.some(x=>x.name===m.name))) errors.push('Unknown inherited metric')
+        for (const choice of selectedMetrics) {
+          const sourceMetric=resolved.metrics.find(m=>m.name===choice.name)
+          if (sourceMetric?.expr && SQL_IDENTIFIER.test(sourceMetric.expr) && !selectedAttrs.some(a=>a.name===sourceMetric.expr))
+            errors.push(`Inherited metric ${choice.name} requires selected attribute ${sourceMetric.expr}`)
+        }
       }
     }
   } else if (selectedAttrs.length || selectedMetrics.length) errors.push('Cannot inherit definitions without a CDO contract.')
