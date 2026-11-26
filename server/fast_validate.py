@@ -108,10 +108,37 @@ def run_command(step: str, argv: list[str], cwd: Path, env: dict | None = None, 
     return output[-MAX_OUTPUT:]
 
 
+
+def check_staging_sql(sql: str) -> None:
+    """Fast PostgreSQL syntax check before cloning. Jinja-enabled SQL is checked by dbt."""
+    if "{{" in sql or "{%" in sql or "{#" in sql:
+        return  # SQLGlot cannot safely interpret dbt Jinja without compilation.
+    try:
+        import sqlglot
+        from sqlglot import exp
+        statements = sqlglot.parse(sql, read="postgres", error_level="RAISE")
+        if len(statements) != 1 or not isinstance(statements[0], (exp.Select, exp.Union, exp.Intersect, exp.Except)):
+            raise InputError("Staging SQL must contain a single SELECT query.")
+        # sqlglot may tolerate malformed/trailing bare identifiers, which are not useful dbt models.
+        if not sql.strip():
+            raise InputError("Enter staging SQL.")
+    except InputError:
+        raise
+    except Exception as exc:
+        raise InputError(f"Staging SQL syntax error: {exc}") from exc
+
+
 def validate_dbt(payload: object, *, runner=run_command) -> dict:
     """Checkout, overlay unsaved edits, compile CDO, parse with dbt Core. Never commit."""
     data = validate_payload(payload)
     steps: list[dict] = []
+    if data["stage_only"] and data["mode"] == "new":
+        try:
+            check_staging_sql(data["sql"])
+        except InputError as exc:
+            return {"ok": False, "steps": [{"name": "SQL syntax", "status": "failed"}],
+                    "error": str(exc), "log": str(exc), "mode": "parse-only", "scope": "staging"}
+        steps.append({"name": "SQL syntax", "status": "passed"})
     with tempfile.TemporaryDirectory(prefix="cdo-dbt-validate-") as dirname:
         root = Path(dirname)
         project, gov = root / "project", root / "governance"
