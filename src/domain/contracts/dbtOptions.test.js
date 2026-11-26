@@ -1,7 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { DATA_TYPES, SIMPLE_AGGREGATIONS, isNumericType, metricAggregationError } from './dbtOptions.js'
-import { initialContracts, toContractDocument, validateContract } from './contracts.js'
+import { initialContracts } from './contractFixtures.test-data.js'
+import { toContractDocument, validateContract } from './contracts.js'
 
 test('Postgres types include existing CDO contract types and common dbt model types', () => {
   for (const type of ['text', 'integer', 'numeric', 'date', 'boolean', 'timestamp', 'varchar', 'jsonb'])
