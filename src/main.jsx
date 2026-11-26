@@ -8,6 +8,7 @@ import ContractExplorer from './ContractExplorer'
 import { contractFilename } from './contractTree'
 import { DATA_TYPES, METRIC_TYPES, SIMPLE_AGGREGATIONS } from './dbtOptions'
 import { restoreContracts, persistContracts } from './draftStorage.js'
+import { fetchGovernanceContracts, mergeRegistryContracts, restoreRegistryBaseline, persistRegistryBaseline } from './githubRegistry.js'
 import { publishContractPR, GOVERNANCE_REPO, registryFilename } from './githubPublish.js'
 import './styles.css'
 
@@ -30,6 +31,27 @@ function App() {
   const [publishing, setPublishing] = useState(false)
   const [publishedPR, setPublishedPR] = useState(null)
   const [draftSaved, setDraftSaved] = useState(true)
+  const [syncingRegistry, setSyncingRegistry] = useState(false)
+  const [registryStatus, setRegistryStatus] = useState('')
+  const syncGitHub = async (token = '', silent = false) => {
+    setSyncingRegistry(true)
+    try {
+      const remote = await fetchGovernanceContracts(fetch, token)
+      const baseline = restoreRegistryBaseline()
+      setContracts(current => {
+        const merged = mergeRegistryContracts(current, remote, baseline)
+        const summary = `${remote.length} contracts read from GitHub · ${merged.added} added · ${merged.updated} refreshed · ${merged.preserved} local edits preserved.`
+        setRegistryStatus(summary)
+        if (!silent || merged.added || merged.updated || merged.preserved) setNotice(summary)
+        return merged.contracts
+      })
+      persistRegistryBaseline(remote)
+    } catch (error) {
+      setRegistryStatus(`GitHub sync unavailable: ${error.message}`)
+      if (!silent) setNotice(`GitHub sync failed: ${error.message}`)
+    } finally { setSyncingRegistry(false) }
+  }
+  useEffect(() => { syncGitHub('', true) }, []) // Load approved main-branch contracts on startup.
   useEffect(() => { setDraftSaved(persistContracts(contracts)) }, [contracts])
   const publish = async () => {
     if (!active || publishing) return
@@ -95,8 +117,10 @@ function App() {
         <div className="section-label">MY CONTRACTS</div>
         <div className="search"><Search size={17}/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search contracts..."/></div>
         <div className="folder-label"><FolderTree size={17}/> My Contracts</div>
+        <button className="outline stretch" disabled={syncingRegistry} onClick={() => syncGitHub(githubToken)}><RotateCcw size={15}/>{syncingRegistry ? "Syncing GitHub..." : "Sync from GitHub"}</button>
+        {registryStatus && <p className="registry-sync-status" role="status">{registryStatus}</p>}
         <ContractExplorer contracts={contracts} search={search} activeId={activeId} onOpen={open} onRemove={removeContract} onAddChild={parent => addContract(true, parent)}/>
-        <div className="sidebar-bottom"><button className="outline stretch" onClick={() => importRef.current?.click()}><Upload size={15}/> Import contract YAML</button><input ref={importRef} accept=".yml,.yaml,text/yaml" type="file" hidden onChange={importContract}/><p>Changes autosave to this browser. Publish a new contract version to GitHub through a review PR, or export YAML for backup.</p></div>
+        <div className="sidebar-bottom"><button className="outline stretch" onClick={() => importRef.current?.click()}><Upload size={15}/> Import contract YAML</button><input ref={importRef} accept=".yml,.yaml,text/yaml" type="file" hidden onChange={importContract}/><p>Approved contracts are loaded from the governance repository. Your local drafts are preserved and autosaved. Sync again after a PR is merged to main.</p></div>
       </aside>
       <main className="main-content">
         {notice && <div className="notice"><CircleAlert size={16}/><span>{notice}</span><button className="icon-quiet" onClick={() => setNotice('')}><X size={15}/></button></div>}
