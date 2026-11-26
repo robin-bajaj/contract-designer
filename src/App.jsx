@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import yaml from 'js-yaml'
-import { CircleAlert, FolderTree, GitBranch, RotateCcw, Search, Upload, X } from 'lucide-react'
+import { CircleAlert, FolderTree, RotateCcw, Search, Upload, X } from 'lucide-react'
 import { toContractDocument, validateContract } from './domain/contracts/contracts.js'
 import ContractCanvas from './features/canvas/ContractCanvas.jsx'
 import ContractExplorer from './features/explorer/ContractExplorer.jsx'
@@ -99,7 +99,6 @@ function App() {
   }
   const cards = filtered
   return <div className="app-shell">
-    <header className="topbar"><div className="brand"><GitBranch size={23}/><strong>CONTRACT DESIGNER</strong></div><span className="tagline">Design standalone and parent/child business contracts with live lineage</span><div className="top-actions"><span className="pill">GitHub registry · main branch</span></div></header>
     <div className="workspace">
       <aside className="sidebar">
         <div className="section-label">MY CONTRACTS</div>
