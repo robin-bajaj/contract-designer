@@ -17,20 +17,21 @@ export function validateContract(contract, contracts) {
   if (!Number.isInteger(Number(contract.version)) || Number(contract.version) < 1) errors.push('Version must be a positive integer.')
   if (contracts.filter(c => c.id !== contract.id && c.name === contract.name && Number(c.version) === Number(contract.version)).length) errors.push('A contract with this name/version already exists.')
   if (contract.uses) {
+    const contractIdentity = c => `${c.name}@${Number(c.version)}`
     const parent = contracts.find(c => c.name === contract.uses.name && Number(c.version) === Number(contract.uses.version))
     if (!parent) errors.push(`Parent contract ${contract.uses.name} v${contract.uses.version} was not found.`)
     else {
       // Resolve effective inherited names, including parent-of-parent contracts.
       const resolve = (c, seen = new Set()) => {
-        if (seen.has(c.name)) return { attributes: [], metrics: [], cycle: true }
+        if (seen.has(contractIdentity(c))) return { attributes: [], metrics: [], cycle: true }
         if (!c.uses) return { attributes: c.attributes.map(a => a.name), metrics: c.metrics.map(m => m.name) }
         const p = contracts.find(x => x.name === c.uses.name && Number(x.version) === Number(c.uses.version))
         if (!p) return { attributes: [], metrics: [] }
-        const inherited = resolve(p, new Set([...seen, c.name]))
+        const inherited = resolve(p, new Set([...seen, contractIdentity(c)]))
         return { attributes: (c.include?.attributes || []).filter(n => inherited.attributes.includes(n)), metrics: (c.include?.metrics || []).filter(n => inherited.metrics.includes(n)), cycle: inherited.cycle }
       }
-      const available = resolve(parent, new Set([contract.name]))
-      if (available.cycle || parent.name === contract.name) errors.push('Circular contract inheritance is not allowed.')
+      const available = resolve(parent, new Set([contractIdentity(contract)]))
+      if (available.cycle || contractIdentity(parent) === contractIdentity(contract)) errors.push('Circular contract inheritance is not allowed.')
       for (const name of contract.include?.attributes || []) if (!available.attributes.includes(name)) errors.push(`Unknown inherited attribute: ${name}`)
       for (const name of contract.include?.metrics || []) if (!available.metrics.includes(name)) errors.push(`Unknown inherited metric: ${name}`)
     }
