@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { AlertCircle, CheckCircle2, Database, ExternalLink, GitBranch, RefreshCw } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Database, ExternalLink, GitBranch, Plus, RefreshCw } from 'lucide-react'
 import { ROLE_OPTIONS } from './roles.js'
 import { fetchTeamSemanticModels, FEDERATED_REPO } from '../../services/github/teamSemanticRegistry.js'
 import { fetchGovernanceContracts } from '../../services/github/githubRegistry.js'
+import { fetchTeamSourceModels } from '../../services/github/teamSourceRegistry.js'
+import TeamModelEditor from './TeamModelEditor.jsx'
 import { describeTeamSemanticModel } from '../../domain/semantics/teamModelView.js'
 import './TeamWorkspace.css'
 
@@ -93,6 +95,8 @@ export default function TeamWorkspace({ role }) {
   const workspace = ROLE_OPTIONS.find(option => option.id === role)
   const [models, setModels] = useState([])
   const [contracts, setContracts] = useState([])
+  const [sourceModels,setSourceModels] = useState([])
+  const [creating,setCreating] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [selectedId, setSelectedId] = useState(null)
@@ -104,11 +108,13 @@ export default function TeamWorkspace({ role }) {
     setError('')
     setModels([])
     setContracts([])
-    Promise.all([fetchTeamSemanticModels(role), fetchGovernanceContracts()])
-      .then(([teamModels, approvedContracts]) => {
+    setSourceModels([])
+    Promise.all([fetchTeamSemanticModels(role), fetchGovernanceContracts(), fetchTeamSourceModels(role)])
+      .then(([teamModels, approvedContracts, ownedSql]) => {
         if (!active) return
         setModels(teamModels)
         setContracts(approvedContracts)
+        setSourceModels(ownedSql)
         setSelectedId(current => teamModels.some(item => item.id === current) ? current : teamModels[0]?.id || null)
       })
       .catch(err => { if (active) setError(err.message) })
@@ -119,14 +125,17 @@ export default function TeamWorkspace({ role }) {
   const presentations = useMemo(() => models.map(model => describeTeamSemanticModel(model, contracts)), [models, contracts])
   const currentModel = presentations.find(model => model.id === selectedId) || presentations[0]
 
+  if (creating) return <div className="team-page"><TeamModelEditor role={role} contracts={contracts} sourceModels={sourceModels} onBack={()=>setCreating(false)}/></div>
+
   return <div className="team-page">
     <main className="team-dashboard">
       <div className="team-dashboard-title">
         <div><span className="team-label">FEDERATED SEMANTIC MODELS</span><h1>{workspace?.label} Workspace</h1>
-          <p>{workspace?.description} · Read-only view of authored models from GitHub main.</p></div>
+          <p>{workspace?.description} · Discover existing models and propose new team-owned models via GitHub PR.</p></div>
+        <div className="team-dashboard-actions"><button type="button" className="primary team-create-button" disabled={loading||Boolean(error)} onClick={()=>setCreating(true)}><Plus size={15}/> Create Semantic Model</button>
         <button type="button" className="outline" disabled={loading} onClick={() => setGeneration(v => v + 1)}>
           <RefreshCw size={15}/>{loading ? 'Loading...' : 'Refresh from GitHub'}
-        </button>
+        </button></div>
       </div>
       <div className="team-repository-line"><Database size={17}/><span>Source: <strong>{FEDERATED_REPO}</strong> · main · Approved CDO contracts from governance registry</span></div>
       {loading && <div className="team-loading" role="status">Loading team-owned semantic models and approved CDO contracts…</div>}
@@ -141,7 +150,7 @@ export default function TeamWorkspace({ role }) {
         </div>
         <ModelDetails model={currentModel}/>
       </>}
-      <p className="team-demo-note">Read-only GitHub discovery; dbt Cloud API access and server-side authorization are not connected yet. Role selection remains a prototype.</p>
+      <p className="team-demo-note">Model discovery and PR authoring use GitHub; live dbt Cloud execution and server-side authorization are not connected yet. Role selection remains a prototype.</p>
     </main>
   </div>
 }
