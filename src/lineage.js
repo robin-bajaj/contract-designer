@@ -4,13 +4,19 @@ export const NODE_HEIGHT = 150
 export const X_GAP = 54
 export const Y_GAP = 110
 
+/** Match the exact version pinned in uses, not the latest contract with the same name. */
+const contractKey = c => `${c.name}@${Number(c.version)}`
+const findParent = (byKey, child) => child.uses
+  ? byKey.get(`${child.uses.name}@${Number(child.uses.version)}`)
+  : undefined
+
 export function createLineageLayout(contracts) {
-  const byName = new Map(contracts.map(c => [c.name, c]))
+  const byKey = new Map(contracts.map(c => [contractKey(c), c]))
   const depthMemo = new Map()
   const depthFor = (contract, visited = new Set()) => {
     if (depthMemo.has(contract.id)) return depthMemo.get(contract.id)
     if (visited.has(contract.id)) return 0 // tolerate draft cycles; validator rejects them
-    const parent = byName.get(contract.uses?.name)
+    const parent = findParent(byKey, contract)
     const depth = parent && parent.id !== contract.id
       ? 1 + depthFor(parent, new Set([...visited, contract.id]))
       : 0
@@ -39,10 +45,10 @@ export function createLineageLayout(contracts) {
 }
 
 export function lineageEdges(contracts, positions) {
-  const byName = new Map(contracts.map(c => [c.name, c]))
+  const byKey = new Map(contracts.map(c => [contractKey(c), c]))
   return contracts.flatMap(c => {
     if (!c.uses) return []
-    const parent = byName.get(c.uses.name)
+    const parent = findParent(byKey, c)
     if (!parent || !positions[parent.id] || !positions[c.id]) return []
     const a = positions[parent.id], b = positions[c.id]
     return [{ id: `${parent.id}->${c.id}`, from: parent.id, to: c.id,
