@@ -60,3 +60,16 @@
 .remove:hover,.remove:focus-visible{background:#c82737;color:white;border-color:#c82737;transform:translateY(-1px)}
 .remove:focus-visible{outline:2px solid #f28a92;outline-offset:2px}
 .tree-remove:hover,.tree-remove:focus-visible{opacity:1;background:#c82737;color:#fff;border-radius:4px}
+
+
+/* Contextual creation: menus appear only after a click, not after a drag. */
+.canvas-context-menu{position:absolute;z-index:15;width:232px;background:#fff;border:1px solid #b9dcc8;border-radius:9px;box-shadow:0 12px 34px #284d3630;padding:7px;display:flex;flex-direction:column;gap:3px}
+.canvas-context-menu button{display:flex;align-items:center;gap:9px;text-align:left;background:#fff;border:0;border-radius:6px;color:#214c36;font-size:13px;font-weight:600;padding:11px 10px;width:100%;cursor:pointer}
+.canvas-context-menu button:hover,.canvas-context-menu button:focus-visible{background:#e5f8ed;color:#007f49;outline:none}
+.canvas-context-title{color:#769184;font-size:11px;font-weight:700;padding:7px 10px 3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.canvas-empty{position:absolute;left:50%;top:48%;transform:translate(-50%,-50%);pointer-events:none;text-align:center;color:#618875;font-size:14px;background:#ffffffb8;border:1px dashed #b2d7c2;border-radius:9px;padding:16px 24px}
+.canvas-viewport:focus-visible{outline:2px solid #00a45e;outline-offset:-2px}
+.tree-context-actions{margin-left:calc(24px + var(--tree-depth,0)*17px);display:flex;flex-wrap:wrap;gap:5px;margin-bottom:7px}
+.tree-context-actions button{display:inline-flex;align-items:center;gap:5px;border:1px solid #c6e6d4;border-radius:5px;padding:6px 8px;background:#f5fcf7;color:#087849;font-size:11px;white-space:nowrap}
+.tree-context-actions button:hover,.tree-context-actions button:focus-visible{background:#dcf6e7;border-color:#00a45e}
+@media(max-width:800px){.tree-context-actions{margin-left:calc(20px + var(--tree-depth,0)*11px)}}
