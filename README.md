@@ -82,3 +82,11 @@ To publish a **new contract version**, enter a fine-grained GitHub token into th
 Local structural checks run before publishing; the governance repo's Python contract validator/CI and human review remain authoritative. Browser-side token usage is appropriate only for a trusted local deployment; for multi-user/production use, replace it with a server-side GitHub App/OAuth flow with short-lived scoped credentials. Browser network restrictions or repository CORS settings can prevent API requests.
 
 Run `npm test` and `npm run build` after pulling the changes.
+
+## GitHub contract registry sync
+
+The designer reads approved YAML from `robin-bajaj/cdo-semantic-governance/contracts/` on the **main** branch through GitHub's public REST API, automatically at startup and when the user clicks **Sync from GitHub** in the sidebar. Newly added contracts are shown in the canvas and inheritance tree according to their YAML `uses.name` and `uses.version` references. New version numbers are distinct nodes.
+
+A three-way merge uses the last imported GitHub snapshot (saved in browser localStorage) and original seeded sample definitions as baselines. Matching unchanged local contracts can be refreshed; locally modified contracts are **not overwritten**. Locally created contracts absent from GitHub are never deleted during sync. The sidebar shows counts of added, updated and preserved contracts. Imported YAML is subsequently editable as a local draft; changes still require the existing Save to GitHub (PR) action to publish.
+
+Only merged files on governance `main` are displayed, not contracts pending in pull requests. GitHub availability and API rate limits may affect synchronization. For private repositories, use the existing GitHub token field in an editor and press Sync from GitHub; never store access tokens in localStorage.
