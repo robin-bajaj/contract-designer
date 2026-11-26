@@ -14,7 +14,7 @@ Open the local URL printed by Vite (usually `http://localhost:5173`).
 ## Features
 
 - Interactive parent/child lineage canvas with draggable cards, pan, zoom, fit-to-view, reset, and search
-- Create standalone or child contracts
+- Contextual creation: click blank canvas for a new standalone contract; click a standalone node for View / Create Child options
 - Edit standalone attributes and simple metrics
 - Select inherited attributes/metrics from a version-pinned parent
 - Import YAML; live YAML preview and per-contract downloads named exactly `<contract.name>.yml`
@@ -68,3 +68,7 @@ These changes do not add automatic contract persistence or GitHub publishing. Ch
 The standalone contract editor offers PostgreSQL-compatible SQL data types (matching the current Neon/dbt environment) and supported **simple** metric aggregations: `sum`, `count`, `count_distinct`, `average`, `min`, `max`, `median`, and `sum_boolean`. These types are adapter-specific; dbt has no single universal physical SQL-type enumeration. Complex dbt metric categories (ratio, derived, cumulative, conversion) require different metadata and are deliberately not offered as if they were simple metric types. The logical CDO contract format remains separate from dbt semantic-model YAML.
 
 Metric descriptions are edited inline, and the Fill Nulls field is no longer shown. Existing imported/seeded `fill_nulls_with` values are **preserved** in exported YAML, rather than silently deleted. Live YAML preview follows the editor fields and validation at the bottom of the page.
+
+## Canvas-first creation workflow
+
+Creation is contextual rather than driven by permanent plus buttons. Click **blank canvas space** (without dragging) and choose **Create Standalone Contract**. Clicking a **standalone contract node** opens options to **View Contract** or **Create Child Contract** linked to that parent. Clicking a child node opens its editor directly. Standalone contracts in the sidebar also offer View/Create Child when selected. Dragging empty space pans, dragging a node repositions it, and neither drag triggers creation. The sidebar-wide +Standalone/+Child and header New Contract buttons have been removed. Press Escape to dismiss a canvas menu. The `uses: {name,version}` relation is set when a child is created, with YAML schema unchanged.
