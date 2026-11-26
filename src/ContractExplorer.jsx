@@ -22,7 +22,7 @@ export default function ContractExplorer({ contracts, search, activeId, onOpen, 
           <span>{contract.name}</span>
           <small>v{contract.version}</small>
         </button>
-        <button type="button" className="icon-quiet danger tree-remove" title={`Delete ${contract.name}`} aria-label={`Delete ${contract.name}`} onClick={() => onRemove(contract.id)}><X size={14}/></button>
+        {onRemove && <button type="button" className="icon-quiet danger tree-remove" title={`Delete ${contract.name}`} aria-label={`Delete ${contract.name}`} onClick={() => onRemove(contract.id)}><X size={14}/></button>}
       </div>
       {menuId === contract.id && !contract.uses && <div className="tree-context-actions" style={{ '--tree-depth': depth }}><button type="button" onClick={() => {setMenuId(null);onOpen(contract.id)}}><Eye size={13}/> View Contract</button><button type="button" onClick={() => {setMenuId(null);onAddChild(contract)}}><GitBranch size={13}/> Create Child</button></div>}
       {hasChildren && expanded && <div className="tree-descendants">{children.map(child => renderNode(child, depth + 1))}</div>}
