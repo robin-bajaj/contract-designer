@@ -81,3 +81,5 @@
 .github-publish-controls input { flex: 1 1 260px; min-width: 180px; border: 1px solid #bdd0c6; border-radius: 8px; padding: 10px 12px; }
 .github-publish-controls button { white-space: nowrap; }
 .github-publish-panel a { color: #08764a; text-decoration: underline; }
+
+.registry-sync-status{font-size:11px;line-height:1.5;color:#5b7667;margin:8px 0 12px;overflow-wrap:anywhere}.sidebar button:disabled{opacity:.65;cursor:wait}
