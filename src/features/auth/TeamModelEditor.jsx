@@ -7,6 +7,7 @@ import {
 import { DATA_TYPES, SIMPLE_AGGREGATIONS } from '../../domain/contracts/dbtOptions.js'
 import { publishTeamModelPR } from '../../services/github/teamModelPublish.js'
 import { fastValidateTeamModel } from '../../services/validation/dbtCoreValidation.js'
+import LiveStagingStatus from './LiveStagingStatus.jsx'
 import './TeamModelEditor.css'
 
 const updateIndex=(items,index,patch)=>items.map((item,i)=>i===index?{...item,...patch}:item)
@@ -100,6 +101,7 @@ export default function TeamModelEditor({role,contracts,sourceModels,onBack}) {
             <textarea value={draft.sourceSql} onChange={e=>setField('sourceSql',e.target.value)} spellCheck={false} rows={7}
               placeholder={`select\n  position_id,\n  report_date,\n  profit_loss,\n  instrument_code\nfrom {{ ref('stg_${role==='team-a'?'team_a':'team_c'}_positions') }}`}/>
           </label>
+          <LiveStagingStatus role={role} sourceModel={draft.sourceModel} sourceSql={draft.sourceSql}/>
           <p className="team-editor-note">New source SQL will be reviewed through GitHub and compiled by dbt CI. Its physical columns must match your declared contract fields.</p>
         </>}
       </section>
