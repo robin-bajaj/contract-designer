@@ -34,7 +34,7 @@ export async function fetchGovernanceContracts(fetchImpl = fetch, token = '') {
   if (!listResponse.ok) throw Error(`GitHub registry listing failed (HTTP ${listResponse.status})`)
   const files = await listResponse.json()
   if (!Array.isArray(files)) throw Error('Unexpected GitHub registry response')
-  const entries = files.filter(f => f.type === 'file' && /\\.ya?ml$/i.test(f.name))
+  const entries = files.filter(f => f.type === 'file' && /\.ya?ml$/i.test(f.name))
   if (!entries.length) throw Error('No YAML contracts found in governance repository')
   const contracts = await Promise.all(entries.map(async file => {
     // Use the GitHub contents API rather than trusting an arbitrary download URL.
@@ -48,7 +48,7 @@ export async function fetchGovernanceContracts(fetchImpl = fetch, token = '') {
       try {
         const maybe = JSON.parse(body)
         if (maybe.encoding === 'base64' && typeof maybe.content === 'string') {
-          const binary = atob(maybe.content.replace(/\\s/g, ''))
+          const binary = atob(maybe.content.replace(/\s/g, ''))
           body = new TextDecoder().decode(Uint8Array.from(binary, c => c.charCodeAt(0)))
         }
       } catch { /* raw YAML may be JSON-looking; parser below validates */ }
