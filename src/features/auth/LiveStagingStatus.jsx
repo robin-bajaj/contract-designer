@@ -40,12 +40,12 @@ export default function LiveStagingStatus({role,sourceModel,sourceSql}) {
   const current=result?.signature===signature?result:null
   const state=incomplete?'idle':current?.status||'pending'
   const statuses={
-    idle:{text:'Enter a valid SQL model name and staging SQL to check',Icon:Clock3},
+    idle:{text:!sourceSql?.trim()?'Start typing staging SQL to validate automatically':'Enter a valid SQL model name to validate',Icon:Clock3},
     pending:{text:'Checking after you stop typing…',Icon:Clock3},
     checking:{text:'Validating with dbt Core…',Icon:LoaderCircle},
-    passed:{text:'✓ dbt Core parse passed',Icon:CheckCircle2},
-    failed:{text:'✕ dbt Core parse failed',Icon:XCircle},
-    busy:{text:'Validation service busy — pause and retry with the button below',Icon:AlertCircle},
+    passed:{text:'✓ Staging validation passed (dbt parse)',Icon:CheckCircle2},
+    failed:{text:'✕ Staging validation failed',Icon:XCircle},
+    busy:{text:'Validation service busy — edit SQL to retry',Icon:AlertCircle},
     unavailable:{text:'Unable to check dbt Core',Icon:AlertCircle},
   }
   const {text:label,Icon}=statuses[state]
