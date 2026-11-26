@@ -10,7 +10,7 @@ const nonblank = value => typeof value === 'string' && value.trim().length > 0
 export function createEmptyTeamModel(role, sourceModel = '') {
   const team = teamFolder(role)
   return {
-    sourceModel,
+    sourceModel: sourceModel || `${team}_new_positions`,
     sourceMode: 'new',
     sourceSql: '',
     semanticName: '',
