@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Maximize2, Minus, Plus, RotateCcw, LayoutGrid, Move, Eye, GitBranch } from 'lucide-react'
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Focus, Minus, Plus, Move, Eye, GitBranch } from 'lucide-react'
 import { canvasContextAction, positionCanvasMenu } from './canvasActions.js'
-import { createLineageLayout, lineageEdges, NODE_WIDTH, NODE_HEIGHT } from './lineage.js'
+import { createLineageLayout, lineageEdgesFromRects, NODE_WIDTH, NODE_HEIGHT } from './lineage.js'
 
 const MIN_SCALE = 0.4
 const MAX_SCALE = 2
@@ -17,6 +17,8 @@ function readPositions() {
 export default function ContractCanvas({ contracts, onOpen, onCreateStandalone, onCreateChild }) {
   const viewport = useRef(null)
   const interaction = useRef(null)
+  const cardRefs = useRef(new Map())
+  const [edgePaths, setEdgePaths] = useState([])
   const [overrides, setOverrides] = useState(readPositions)
   const [contextMenu, setContextMenu] = useState(null)
   const [view, setView] = useState({ x: 0, y: 0, scale: 1 })
@@ -29,11 +31,33 @@ export default function ContractCanvas({ contracts, onOpen, onCreateStandalone, 
     }
     return result
   }, [auto, overrides, contracts])
-  const edges = useMemo(() => lineageEdges(contracts, positions), [contracts, positions])
   const bounds = useMemo(() => ({
     width: Math.max(auto.width, ...Object.values(positions).map(p => p.x + NODE_WIDTH + 70)),
     height: Math.max(auto.height, ...Object.values(positions).map(p => p.y + NODE_HEIGHT + 70)),
   }), [auto, positions])
+
+  // Cards and connectors must share the *rendered* coordinate space. Measuring
+  // DOM rectangles prevents detachment when zoom/pan or cached card positions
+  // differ from the SVG's intrinsic coordinate system.
+  const measureEdges = useCallback(() => {
+    const root = viewport.current
+    if (!root) return
+    const rect = root.getBoundingClientRect()
+    const cardRects = Object.fromEntries(
+      contracts.map(c => [c.id, cardRefs.current.get(c.id)?.getBoundingClientRect()])
+        .filter(([, box]) => Boolean(box))
+    )
+    const next = lineageEdgesFromRects(contracts, cardRects, rect)
+    setEdgePaths(previous => JSON.stringify(previous) === JSON.stringify(next) ? previous : next)
+  }, [contracts])
+  useLayoutEffect(() => { measureEdges() }, [measureEdges, positions, view])
+  useEffect(() => {
+    const root = viewport.current
+    if (!root || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(measureEdges)
+    observer.observe(root)
+    return () => observer.disconnect()
+  }, [measureEdges])
 
   useEffect(() => {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(overrides)) } catch { /* optional */ }
@@ -54,21 +78,8 @@ export default function ContractCanvas({ contracts, onOpen, onCreateStandalone, 
       scale,
     })
   }, [positions])
-  const fit = useCallback(() => {
-    if (!viewport.current) return
-    const { width, height } = viewport.current.getBoundingClientRect()
-    const pts = Object.values(positions)
-    if (!pts.length) { centerAt(1); return }
-    const left = Math.min(...pts.map(p => p.x))
-    const top = Math.min(...pts.map(p => p.y))
-    const right = Math.max(...pts.map(p => p.x + NODE_WIDTH))
-    const bottom = Math.max(...pts.map(p => p.y + NODE_HEIGHT))
-    const scale = clamp(Math.min((width - 80) / (right - left), (height - 80) / (bottom - top), 1.2), MIN_SCALE, MAX_SCALE)
-    centerAt(scale)
-  }, [positions, centerAt])
-
   // Default to true 100% zoom, centered on the graph, rather than auto-fit.
-  // Fit is now explicitly requested through the expand-arrows toolbar button.
+  // The single center control returns to this scale without changing any card position.
   const ids = contracts.map(c => c.id).join('|')
   useEffect(() => { centerAt(1) }, [ids]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -147,30 +158,6 @@ export default function ContractCanvas({ contracts, onOpen, onCreateStandalone, 
     window.addEventListener('keydown', close)
     return () => window.removeEventListener('keydown', close)
   }, [])
-  // Reset zoom only; do not discard the user's saved card coordinates or pan.
-  const resetZoom = () => setView(previous => {
-    const box = viewport.current
-    const centerX = (box?.clientWidth || 800) / 2
-    const centerY = (box?.clientHeight || 550) / 2
-    const ratio = 1 / previous.scale
-    return {
-      x: centerX - (centerX - previous.x) * ratio,
-      y: centerY - (centerY - previous.y) * ratio,
-      scale: 1,
-    }
-  })
-  const restoreLayout = () => {
-    setOverrides({})
-    try { localStorage.removeItem(STORAGE_KEY) } catch { /* optional */ }
-    // Reset to the auto-layout at actual 100%, not the prior saved zoom.
-    const pts = Object.values(auto.positions)
-    if (!pts.length) { setView({ x: 0, y: 0, scale: 1 }); return }
-    const rect = viewport.current?.getBoundingClientRect()
-    if (!rect) return
-    const left = Math.min(...pts.map(p => p.x)), top = Math.min(...pts.map(p => p.y))
-    const right = Math.max(...pts.map(p => p.x + NODE_WIDTH)), bottom = Math.max(...pts.map(p => p.y + NODE_HEIGHT))
-    setView({x:(rect.width-left-right)/2,y:(rect.height-top-bottom)/2,scale:1})
-  }
   useEffect(() => {
     const element = viewport.current
     if (!element) return
@@ -193,15 +180,14 @@ export default function ContractCanvas({ contracts, onOpen, onCreateStandalone, 
       <button type="button" data-tooltip="Zoom out · reduce scale" aria-label="Zoom out" onClick={() => zoomAt(1 / 1.2, (viewport.current?.clientWidth || 800) / 2, (viewport.current?.clientHeight || 550) / 2)}><Minus size={17}/></button>
       <span className="zoom-level" data-tooltip="Current zoom level" tabIndex={0} aria-label={`Canvas zoom ${Math.round(view.scale * 100)} percent`}>{Math.round(view.scale * 100)}%</span>
       <button type="button" data-tooltip="Zoom in · increase scale" aria-label="Zoom in" onClick={() => zoomAt(1.2, (viewport.current?.clientWidth || 800) / 2, (viewport.current?.clientHeight || 550) / 2)}><Plus size={17}/></button>
-      <button type="button" data-tooltip="Fit all contracts · centers and scales the view" aria-label="Fit all contracts" onClick={fit}><Maximize2 size={16}/></button>
-      <button type="button" data-tooltip="Reset zoom to 100% · keep card layout" aria-label="Reset zoom to 100%" onClick={resetZoom}><RotateCcw size={16}/></button>
-      <button type="button" data-tooltip="Restore automatic card positions · changes layout" aria-label="Restore automatic card positions" onClick={restoreLayout}><LayoutGrid size={16}/></button>
+      <button type="button" data-tooltip="Center canvas at 100% · preserves card positions" aria-label="Center canvas at 100%" onClick={() => centerAt(1)}><Focus size={16}/></button>
     </div>
     <div className="canvas-viewport" ref={viewport} onPointerDown={e => start(e, 'pan')} onPointerMove={move} onPointerUp={end} onPointerCancel={end} onContextMenu={e => openContext(e, 'pan')} aria-label="Interactive contract lineage canvas" tabIndex={0} onKeyDown={e => openKeyboardContext(e, 'pan')}>
       <div className="canvas-world" style={{ width: bounds.width, height: bounds.height, transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }}>
-        <svg className="canvas-connections" width={bounds.width} height={bounds.height} aria-hidden="true"><defs><marker id="lineage-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 Z" fill="#009c58"/></marker></defs>{edges.map(e => <path key={e.id} d={e.path} fill="none" stroke="#009c58" strokeWidth="2.2" markerEnd="url(#lineage-arrow)"/>)}</svg>
-        {contracts.map(c => <button key={c.id} type="button" className={`contract-card canvas-card ${c.uses ? 'child' : ''}`} style={{left: positions[c.id]?.x || 0, top: positions[c.id]?.y || 0}} onPointerDown={e => start(e, 'node', c.id)} onPointerMove={move} onPointerUp={end} onPointerCancel={end} onContextMenu={e => openContext(e, 'node', c)} onDoubleClick={e => openDoubleClick(e, c)} onKeyDown={e => openKeyboardContext(e, 'node', c)} aria-label={`Options for ${c.name} contract (double-click, right-click or Shift+F10)`}><span className="card-emoji" aria-hidden="true">{c.uses ? '🔗' : '📦'}</span><strong>{c.name}</strong><span className="card-badge">{c.uses ? 'CHILD CONTRACT' : 'STANDALONE CONTRACT'}</span><small>{c.uses ? `uses ${c.uses.name} v${c.uses.version}` : `v${c.version} · ${c.attributes.length} attributes, ${c.metrics.length} metrics`}</small></button>)}
+
+        {contracts.map(c => <button key={c.id} ref={element => { if(element) cardRefs.current.set(c.id,element); else cardRefs.current.delete(c.id) }} type="button" className={`contract-card canvas-card ${c.uses ? 'child' : ''}`} style={{left: positions[c.id]?.x || 0, top: positions[c.id]?.y || 0}} onPointerDown={e => start(e, 'node', c.id)} onPointerMove={move} onPointerUp={end} onPointerCancel={end} onContextMenu={e => openContext(e, 'node', c)} onDoubleClick={e => openDoubleClick(e, c)} onKeyDown={e => openKeyboardContext(e, 'node', c)} aria-label={`Options for ${c.name} contract (double-click, right-click or Shift+F10)`}><span className="card-emoji" aria-hidden="true">{c.uses ? '🔗' : '📦'}</span><strong>{c.name}</strong><span className="card-badge">{c.uses ? 'CHILD CONTRACT' : 'STANDALONE CONTRACT'}</span><small>{c.uses ? `uses ${c.uses.name} v${c.uses.version}` : `v${c.version} · ${c.attributes.length} attributes, ${c.metrics.length} metrics`}</small></button>)}
       </div>
+      <svg className="canvas-connections-overlay" aria-hidden="true"><defs><marker id="lineage-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 Z" fill="#009c58"/></marker></defs>{edgePaths.map(e => <path key={e.id} d={e.path} fill="none" stroke="#009c58" strokeWidth="2.2" markerEnd="url(#lineage-arrow)"/>)}</svg>
       {!contracts.length && <p className="canvas-empty">Right-click anywhere to create your first standalone contract</p>}
       {contextMenu && <div className="canvas-context-menu" role="group" aria-label={contextMenu.kind === 'standalone' ? 'Canvas creation options' : 'Contract actions'} style={{ left: contextMenu.x, top: contextMenu.y }} onPointerDown={e => e.stopPropagation()} onPointerUp={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
         {contextMenu.kind === 'standalone' ? <button type="button" autoFocus onClick={() => {setContextMenu(null);onCreateStandalone()}}><Plus size={16}/> Create Standalone Contract</button> : <>
