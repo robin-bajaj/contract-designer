@@ -5,8 +5,9 @@ import {fileURLToPath} from 'node:url'
 
 const source=readFileSync(fileURLToPath(new URL('./LiveStagingStatus.jsx',import.meta.url)),'utf8')
 const editor=readFileSync(fileURLToPath(new URL('./TeamModelEditor.jsx',import.meta.url)),'utf8')
-test('SQL editor mounts live validation without requiring semantic fields',()=>{
-  assert.match(editor,/<LiveStagingStatus role=\{role\} sourceModel=\{draft\.sourceModel\} sourceSql=\{draft\.sourceSql\}/)
+test('Team editor pauses the federated-backed live validation component in local mode',()=>{
+  assert.doesNotMatch(editor,/<LiveStagingStatus/)
+  assert.match(editor,/Save local draft/)
 })
 test('live validation is debounced and old requests are cancelled',()=>{
   assert.match(source,/setTimeout\(/)
