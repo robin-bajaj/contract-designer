@@ -113,3 +113,30 @@ class TeamLeadConnectionTests(unittest.TestCase):
 
 if __name__=="__main__":
     unittest.main()
+
+class GithubAccessDiagnosticsTests(unittest.TestCase):
+    def test_github_rate_limit_is_not_reported_as_missing_permission(self):
+        from urllib.error import HTTPError
+        from unittest.mock import patch
+        from email.message import Message
+        headers = Message()
+        headers["X-RateLimit-Remaining"] = "0"
+        def limited(*_args, **_kwargs):
+            raise HTTPError("https://api.github.com/", 403, "rate limit", headers, None)
+        with patch("server.project_connections.urlopen", side_effect=limited):
+            with self.assertRaises(team_portal.PortalError) as caught:
+                pc._github("/repos/example/test")
+        self.assertEqual(caught.exception.status, 429)
+        self.assertIn("rate limit", str(caught.exception).lower())
+        self.assertNotIn("must grant", str(caught.exception))
+
+    def test_bad_token_reports_authentication_not_rate_limit(self):
+        from urllib.error import HTTPError
+        from unittest.mock import patch
+        def unauthorized(*_args, **_kwargs):
+            raise HTTPError("https://api.github.com/", 401, "Unauthorized", {}, None)
+        with patch("server.project_connections.urlopen", side_effect=unauthorized):
+            with self.assertRaises(team_portal.PortalError) as caught:
+                pc._github("/repos/example/test")
+        self.assertEqual(caught.exception.status, 503)
+        self.assertIn("rejected", str(caught.exception))
