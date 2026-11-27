@@ -33,13 +33,12 @@ test('team workspace opens discovered Git files in read-only project explorer',(
   assert.match(tree,/FileJson|FileCode2/)
 })
 
-test('GitHub App integration verifies linked repository without PAT in browser',()=>{
+test('GitHub fine-grained token is submitted to backend and cleared after success',()=>{
   const api=read('../../services/portal/projectConnectionApi.js')
   const backend=read('../../../server/project_connections.py')
-  assert.match(admin,/Install \/ authorize GitHub App/)
-  assert.match(admin,/Verify GitHub connection/)
-  assert.match(api,/leadVerifyGithub/)
-  assert.match(backend,/verify_github_connection/)
-  assert.match(backend,/github_installation_id/)
-  assert.doesNotMatch(admin,/GitHub personal access token.*input/)
+  assert.match(admin,/GitHub fine-grained personal access token/)
+  assert.match(admin,/setGithubToken\(''\)/)
+  assert.match(api,/leadConnectGithubToken/)
+  assert.match(backend,/connect_github_token/)
+  assert.doesNotMatch(admin,/localStorage|sessionStorage|document\.cookie/)
 })

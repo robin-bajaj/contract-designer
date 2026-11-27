@@ -1,4 +1,4 @@
-"""Local portal persistence and validation-gated publication tests."""
+"""Local portal persistence and validation-gated GitHub PR publication tests."""
 import tempfile
 import unittest
 from pathlib import Path
@@ -42,25 +42,34 @@ class PortalTests(unittest.TestCase):
         self.assertEqual(portal.list_drafts("team-c"),[])
         self.assertEqual(portal.load_draft(draft["id"])["id"],draft["id"])
 
-    def test_validation_then_publish_writes_native_files_only_to_target_project(self):
+    def test_validation_then_publish_opens_github_pr_without_writing_local_files(self):
         draft=portal.save_draft(payload())
         with self.assertRaisesRegex(portal.PortalError,"Validate"):
             portal.publish_draft(draft["id"])
         compiled=YAML.replace("description: An equity model","description: Native compiled model")
-        validated=portal.mark_validated(draft["id"],{"ok":True,"compiledYaml":compiled})
+        validated=portal.mark_validated(draft["id"],{"ok":True,"compiledYaml":compiled,"validationRevision":"a"*40,"validatedRepository":"example/team-a"})
         self.assertEqual(validated["status"],"validated")
-        result=portal.publish_draft(draft["id"])
-        self.assertEqual(result["status"],"published-local")
-        self.assertEqual((self.project/"models/staging/team_a/team_a_new.sql").read_text(),
-                         "select 1 as position_id")
-        self.assertEqual((self.project/"models/semantic_models/team_a/equity_new.yml").read_text(),compiled)
-        self.assertEqual(portal.load_draft(draft["id"])["status"],"published")
-        with self.assertRaisesRegex(portal.PortalError,"already exists"):
+        response={"status":"pr-open","repository":"example/team-a",
+                  "prUrl":"https://github.com/example/team-a/pull/22",
+                  "prNumber":22,"paths":["models/staging/team_a/team_a_new.sql",
+                                     "models/semantic_models/team_a/equity_new.yml"]}
+        with patch("server.github_publish.publish",return_value=response) as publish:
+            result=portal.publish_draft(draft["id"])
+        publish.assert_called_once()
+        self.assertEqual(publish.call_args.args[1],YAML)
+        self.assertEqual(publish.call_args.kwargs["expected_revision"],"a"*40)
+        self.assertEqual(result["status"],"pr-open")
+        self.assertEqual(portal.load_draft(draft["id"])["status"],"submitted")
+        self.assertEqual(portal.load_draft(draft["id"])["prUrl"],response["prUrl"])
+        self.assertFalse((self.project/"models/staging/team_a/team_a_new.sql").exists())
+        with self.assertRaisesRegex(portal.PortalError,"already submitted"):
             portal.publish_draft(draft["id"])
+        with self.assertRaisesRegex(portal.PortalError,"already has a GitHub PR"):
+            portal.save_draft({**payload(),"id":draft["id"]})
 
     def test_changes_invalidate_validated_revision_and_block_publish(self):
         saved=portal.save_draft(payload())
-        portal.mark_validated(saved["id"],{"ok":True,"compiledYaml":YAML})
+        portal.mark_validated(saved["id"],{"ok":True,"compiledYaml":YAML,"validationRevision":"a"*40,"validatedRepository":"example/team-a"})
         changed=portal.save_draft({**payload(),"id":saved["id"],"sourceSql":"select 2 as position_id"})
         self.assertEqual(changed["status"],"draft")
         with self.assertRaisesRegex(portal.PortalError,"Validate"):
@@ -71,20 +80,23 @@ class PortalTests(unittest.TestCase):
         with self.assertRaisesRegex(portal.PortalError,"another team's draft"):
             portal.save_draft({**payload("team-c"),"id":saved["id"]})
 
-    def test_no_manual_project_configuration_needed_to_publish(self):
+    def test_remote_publish_failure_leaves_draft_validated(self):
         saved=portal.save_draft(payload())
-        portal.mark_validated(saved["id"],{"ok":True,"compiledYaml":YAML})
-        with patch.dict("os.environ",{"DBT_PROJECT_PATH":"/tmp/old-project-is-ignored"}):
-            result=portal.publish_draft(saved["id"])
-        self.assertEqual(result["status"],"published-local")
-        self.assertTrue((self.project/"models/staging/team_a/team_a_new.sql").is_file())
-
+        portal.mark_validated(saved["id"],{"ok":True,"compiledYaml":YAML,"validationRevision":"a"*40,"validatedRepository":"example/team-a"})
+        with patch("server.github_publish.publish",
+                   side_effect=portal.PortalError("GitHub permission denied",403)):
+            with self.assertRaisesRegex(portal.PortalError,"GitHub permission denied"):
+                portal.publish_draft(saved["id"])
+        self.assertEqual(portal.load_draft(saved["id"])["status"],"validated")
 
     def test_published_sql_is_discoverable_as_source(self):
         saved=portal.save_draft(payload())
-        portal.mark_validated(saved["id"],{"ok":True,"compiledYaml":YAML})
-        portal.publish_draft(saved["id"])
-        self.assertEqual(portal.source_models("team-a"),["team_a_new"])
+        portal.mark_validated(saved["id"],{"ok":True,"compiledYaml":YAML,"validationRevision":"a"*40,"validatedRepository":"example/team-a"})
+        with patch("server.github_publish.publish",return_value={
+            "status":"pr-open","prUrl":"https://github.com/example/team-a/pull/22",
+            "prNumber":22}):
+            portal.publish_draft(saved["id"])
+        self.assertIn("team_a_new",portal.source_models("team-a"))
 
 if __name__=="__main__":
     unittest.main()

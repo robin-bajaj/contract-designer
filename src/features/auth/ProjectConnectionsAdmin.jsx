@@ -1,6 +1,6 @@
 import React,{useState,useEffect} from 'react'
 import {ArrowLeft,CheckCircle2,Cloud,Database,GitBranch,Link2,ShieldCheck} from 'lucide-react'
-import {leadDiscoverProjects,leadPreviewProject,leadConnectProject,leadGithubStatus,leadVerifyGithub} from '../../services/portal/projectConnectionApi.js'
+import {leadDiscoverProjects,leadPreviewProject,leadConnectProject,leadGithubStatus,leadConnectGithubToken,leadDisconnectGithub} from '../../services/portal/projectConnectionApi.js'
 import './ProjectConnectionsAdmin.css'
 
 /** Local POC dbt Cloud onboarding, without a redundant Team Lead code.
@@ -21,10 +21,21 @@ export default function ProjectConnectionsAdmin({role,onBack}) {
   const [github,setGithub]=useState(null)
   const [githubError,setGithubError]=useState('')
   const [githubLoading,setGithubLoading]=useState(false)
+  const [githubToken,setGithubToken]=useState('')
   const refreshGithub=async()=>{try{setGithub(await leadGithubStatus(role));setGithubError('')}catch(e){setGithubError(e.message)}}
   useEffect(()=>{refreshGithub()},[role])
-  const verifyGithub=async()=>{setGithubLoading(true);setGithubError('');try{setGithub(await leadVerifyGithub(role))}catch(e){setGithubError(e.message)}finally{setGithubLoading(false)}}
-  const team=role==='team-a'?'Team A':'Team C'
+  const connectGithub=async(e)=>{
+    e.preventDefault();setGithubLoading(true);setGithubError('')
+    try {const result=await leadConnectGithubToken(role,githubToken);setGithub(result);setGithubToken('')}
+    catch(e){setGithubError(e.message)}
+    finally{setGithubLoading(false)}
+  }
+  const disconnectGithub=async()=>{setGithubLoading(true);setGithubError('')
+    try{setGithub(await leadDisconnectGithub(role));setGithubToken('')}
+    catch(e){setGithubError(e.message)}
+    finally{setGithubLoading(false)}
+  }
+  const team = 'Team ' + role.replace(/^team-/, '').split('-').map(part => part.charAt(0).toUpperCase() + part.slice(1)).join(' ')
   const details=()=>({role,apiHost:apiHost.trim().toLowerCase(),accountId:Number(accountId),serviceToken})
   const resetSelection=()=>{setProjects([]);setProjectId('');setPreview(null);setEnvironmentId('');setSaved(null);setError('')}
 
@@ -127,19 +138,30 @@ export default function ProjectConnectionsAdmin({role,onBack}) {
       {error && <p className="project-connect-error" role="alert">{error}</p>}
       <small>Local development only: this screen has no sign-in or Team Lead authentication. Do not expose the portal publicly. Production requires company SSO and team permissions. Service tokens are encrypted server-side, and never saved to browser storage.</small>
     </section>}
-    <section className="project-connect-panel" aria-label="GitHub App connection">
+    <section className="project-connect-panel" aria-label="GitHub token connection">
       <h2><GitBranch size={20}/> GitHub repository access</h2>
-      <p>Use the organization's GitHub App to authorize the repository linked to this team's dbt project. No GitHub personal access token is required.</p>
+      <p>Connect the exact repository already linked to this team's dbt project. Use a fine-grained GitHub personal access token restricted to that repository. For browsing, grant <strong>Contents: Read-only</strong>. To create model pull requests, grant <strong>Contents: Read and write</strong> and <strong>Pull requests: Read and write</strong>.</p>
       <div className="project-connect-summary">
         <div><strong>Linked repository</strong><span>{github?.repository||'Connect a dbt project first'}</span></div>
-        <div><strong>GitHub App</strong><span>{github?.connected?'Connected':github?.configured?'Ready to authorize':'Not configured by platform administrator'}</span></div>
+        <div><strong>GitHub access</strong><span>{github?.connected?'Connected (encrypted server-side)':'Not connected'}</span></div>
       </div>
-      {github?.installUrl && github?.repository && !github.connected && <a className="primary github-app-install-link" href={github.installUrl} target="_blank" rel="noopener noreferrer">Install / authorize GitHub App</a>}
-      <button type="button" className="outline" disabled={githubLoading||!github?.configured||!github?.repository} onClick={verifyGithub}>
-        <CheckCircle2 size={15}/>{githubLoading?'Verifying on GitHub…':github?.connected?'Reverify GitHub access':'Verify GitHub connection'}
-      </button>
+      {github?.repository && !github?.connected && <form onSubmit={connectGithub}>
+        <div className="project-connect-fields">
+          <label>GitHub fine-grained personal access token
+            <input type="password" value={githubToken} autoComplete="off" required
+              onChange={e=>{setGithubToken(e.target.value);setGithubError('')}}
+              placeholder="Paste token (stored encrypted server-side)"/>
+          </label>
+        </div>
+        <button type="submit" className="primary" disabled={githubLoading||!githubToken.trim()}>
+          <CheckCircle2 size={15}/>{githubLoading?'Checking repository access…':'Connect GitHub'}
+        </button>
+      </form>}
+      {github?.connected && <button type="button" className="outline" disabled={githubLoading} onClick={disconnectGithub}>
+        Disconnect GitHub
+      </button>}
       {githubError && <p className="project-connect-error" role="alert">{githubError}</p>}
-      <small>After authorizing the repository on GitHub, return here and verify. Only repository read permission is used for project browsing. PR publishing requires a separate permissions upgrade and is not enabled by this connection.</small>
+      <small>Generate a <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener noreferrer">fine-grained GitHub token</a> with access only to the repository above. The token is verified against GitHub, encrypted on the local backend and erased from the form after success. No GitHub token is stored in browser storage. This localhost POC has no authentication; do not deploy publicly. PR publishing is not enabled yet.</small>
     </section>
     <p className="project-connect-footnote">This first milestone provides read-only discovery of existing SQL, YAML and CDO references. Remote editing, live database execution and PR publication are not yet connected. No warehouse password is requested.</p>
   </main>

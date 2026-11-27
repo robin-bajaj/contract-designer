@@ -92,8 +92,8 @@ function ModelDetails({ model }) {
   </div>
 }
 
-export default function TeamWorkspace({ role }) {
-  const workspace = ROLE_OPTIONS.find(option => option.id === role)
+export default function TeamWorkspace({ role, roleOptions = ROLE_OPTIONS }) {
+  const workspace = roleOptions.find(option => option.id === role) || { label: role, description: "Team semantic models" }
   const [models, setModels] = useState([])
   const [contracts, setContracts] = useState([])
   const [sourceModels,setSourceModels] = useState([])

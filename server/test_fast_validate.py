@@ -63,6 +63,40 @@ class FastValidationTests(unittest.TestCase):
         self.assertEqual(result["compiledYaml"],YAML)
         self.assertFalse((self.project/"models/staging/team_a/new_team_a.sql").exists())
 
+    def test_new_team_validates_in_complete_connected_project_snapshot(self):
+        """Existing sibling and CDO semantic models must be part of dbt parse."""
+        draft = {
+            **PAYLOAD, "role": "team-risk",
+            "semanticName": "new_team_a_semantics",
+        }
+        connection = {
+            "repository": "example/risk", "branch": "main", "subdirectory": "",
+        }
+        def snapshot(role, project):
+            self.assertEqual(role, "team-risk")
+            (project / "models/semantic_models/team_a").mkdir(parents=True)
+            (project / "models/semantic_models/team_a/existing.yml").write_text(
+                "version: 2\nmodels: []\n"
+            )
+            (project / "dbt_project.yml").write_text("name: linked\nprofile: linked\n")
+            return {**connection, "revision": "a" * 40}
+        def runner(name, argv, cwd, env=None, timeout=65):
+            if name == "dbt Core parse":
+                project = Path(cwd)
+                self.assertTrue((project / "models/semantic_models/team_a/existing.yml").is_file())
+                self.assertTrue((project / "models/semantic_models/team_risk/new_team_a_semantics.yml").is_file())
+                self.assertIn("linked:", (project / ".ci/profiles.yml").read_text())
+                (project / "target").mkdir()
+                (project / "target/manifest.json").write_text("{}")
+            return "ok"
+        with patch("server.fast_validate.project_connections.connection_for", return_value=connection), \
+             patch("server.fast_validate.project_snapshot.snapshot", side_effect=snapshot), \
+             patch("server.fast_validate.shutil.which", return_value="/usr/bin/dbt"):
+            result = validate_dbt(draft, runner=runner)
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(result["validationRevision"], "a" * 40)
+        self.assertEqual(result["validatedRepository"], "example/risk")
+
     def test_existing_source_must_exist_locally(self):
         result=validate_dbt({**PAYLOAD,"sourceMode":"existing","sourceSql":None},
                             runner=lambda *a,**kw:"ok")
@@ -202,8 +236,7 @@ models:
             result = validate_dbt(PAYLOAD, runner=runner)
         self.assertFalse(result["ok"])
         self.assertIn("team_a_positions", result["error"])
-        self.assertIn("standalone staging SQL", result["hint"])
-        self.assertIn("paused federated", result["hint"])
+        self.assertIn("connected dbt project", result["hint"])
         self.assertEqual(result["steps"][-1], {"name": "dbt Core parse", "status": "failed"})
 
 if __name__=="__main__":

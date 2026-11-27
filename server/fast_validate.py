@@ -16,12 +16,11 @@ import tempfile
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
-from . import team_portal, dbt_cloud, project_connections
+from . import team_portal, dbt_cloud, project_connections, project_snapshot, validation_diagnostics, team_registry
 
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("FAST_VALIDATE_PORT", "8765"))
 IDENTIFIER = re.compile(r"^[a-z][a-z0-9_]*$")
-TEAMS = {"team-a": "team_a", "team-c": "team_c"}
 GOVERNANCE_URL = "https://github.com/robin-bajaj/cdo-semantic-governance.git"
 MAX_BODY = 128 * 1024
 MAX_OUTPUT = 12000
@@ -55,9 +54,10 @@ def validate_payload(payload: object) -> dict:
     if not isinstance(payload, dict):
         raise InputError("Expected JSON object")
     role = payload.get("role")
-    team = TEAMS.get(role)
-    if not team:
-        raise InputError("Only Team A and Team C models can be validated")
+    try:
+        team = project_snapshot.team_folder(role)
+    except team_portal.PortalError as exc:
+        raise InputError(str(exc)) from exc
     source = payload.get("sourceModel")
     stage_only = payload.get("validationScope") == "staging"
     semantic = payload.get("semanticName")
@@ -132,7 +132,7 @@ def check_staging_sql(sql: str) -> None:
 
 
 def validate_dbt(payload: object, *, runner=run_command) -> dict:
-    """Overlay unsaved edits on a snapshot of the managed project and parse with dbt."""
+    """Overlay unsaved edits in the connected project and run native dbt validation."""
     data = validate_payload(payload)
     steps: list[dict] = []
     if data["stage_only"] and data["mode"] == "new":
@@ -146,12 +146,19 @@ def validate_dbt(payload: object, *, runner=run_command) -> dict:
         root = Path(dirname)
         project, gov = root / "project", root / "governance"
         try:
-            source = team_portal.project_path()
-            if not (source / "dbt_project.yml").is_file():
-                raise InputError("Model workspace could not initialize; contact the administrator")
-            # Team models live in our managed project; never pull from federated-semantic-poc.
-            shutil.copytree(source, project, ignore=shutil.ignore_patterns(".git", "target", "logs", ".venv", ".portal"))
-            steps.append({"name": "Load model workspace", "status": "passed"})
+            connection = project_connections.connection_for(payload["role"])
+            validation_context = None
+            if connection:
+                validation_context = project_snapshot.snapshot(payload["role"], project)
+                steps.append({"name": "Load connected dbt project", "status": "passed"})
+            else:
+                # Unconnected teams may iterate locally, but cannot publish
+                # until the model is validated against their linked project.
+                source = team_portal.project_path()
+                if not (source / "dbt_project.yml").is_file():
+                    raise InputError("Model workspace could not initialize; contact the administrator")
+                shutil.copytree(source, project, ignore=shutil.ignore_patterns(".git", "target", "logs", ".venv", ".portal"))
+                steps.append({"name": "Load local model workspace (not publishable)", "status": "passed"})
             yaml_path = (project / "models" / "semantic_models" / data["team"] / (data["semantic"] + ".yml")) if not data["stage_only"] else None
             sql_path = project / "models" / "staging" / data["team"] / (data["source"] + ".sql")
             if not data["stage_only"] and yaml_path.exists():
@@ -212,6 +219,9 @@ def validate_dbt(payload: object, *, runner=run_command) -> dict:
             dbt = shutil.which("dbt")
             if not dbt:
                 raise StepFailure("dbt Core parse", "dbt command not found; install backend requirements")
+            if (project / "packages.yml").is_file() or (project / "dependencies.yml").is_file():
+                runner("dbt dependencies", [dbt, "deps", "--profiles-dir", str(profiles)], project, env=env, timeout=90)
+                steps.append({"name": "dbt dependencies", "status": "passed"})
             output = runner("dbt Core parse",
                             [dbt, "parse", "--profiles-dir", str(profiles), "--no-partial-parse"],
                             project, env=env, timeout=90)
@@ -219,6 +229,8 @@ def validate_dbt(payload: object, *, runner=run_command) -> dict:
             if not (project / "target" / "manifest.json").is_file():
                 raise StepFailure("dbt Core parse", "dbt parse completed without a manifest.json")
             return {"ok": True, "steps": steps, "log": output, "mode": "parse-only",
+                    "validationRevision": validation_context["revision"] if validation_context else None,
+                    "validatedRepository": validation_context["repository"] if validation_context else None,
                     "scope": "staging" if data["stage_only"] else "full-draft",
                     "compiledYaml": yaml_path.read_text(encoding="utf-8") if yaml_path else None}
         except StepFailure as exc:
@@ -235,11 +247,14 @@ def validate_dbt(payload: object, *, runner=run_command) -> dict:
                 return {
                     "ok": False, "steps": steps, "log": exc.output,
                     "error": f"Referenced model '{name}' does not exist in this workspace.",
-                    "hint": "Use a model already published in this portal, or write standalone staging SQL without ref(). Models in the paused federated project are not available here.",
+                    "hint": "Check the model refs in the connected dbt project at the revision used for validation.",
                     "mode": "parse-only",
                 }
+            diagnostics = validation_diagnostics.diagnose(exc.output) if exc.step == "dbt Core parse" else []
             return {"ok": False, "steps": steps, "log": exc.output,
-                    "error": f"{exc.step} failed", "mode": "parse-only"}
+                    "diagnostics": diagnostics,
+                    "error": diagnostics[0]["message"] if diagnostics else f"{exc.step} failed",
+                    "mode": "parse-only"}
         except InputError as exc:
             steps.append({"name": "Validate source files", "status": "failed"})
             return {"ok": False, "steps": steps, "log": str(exc), "error": str(exc), "mode": "parse-only"}
@@ -247,6 +262,9 @@ def validate_dbt(payload: object, *, runner=run_command) -> dict:
 
 ONBOARDING_PATHS = frozenset({
     "/api/lead/dbt/projects", "/api/lead/dbt/preview", "/api/lead/dbt/connect",
+    "/api/lead/github/connect", "/api/lead/github/disconnect",
+    "/api/teams/register",
+    "/api/team-models/publish",
 })
 
 
@@ -279,7 +297,8 @@ class Handler(BaseHTTPRequestHandler):
                    "/api/team-models/publish", "/api/dbt/jobs/run",
                    "/api/lead/dbt/projects",
                    "/api/lead/dbt/preview", "/api/lead/dbt/connect",
-                   "/api/lead/github/verify"}
+                   "/api/lead/github/connect", "/api/lead/github/disconnect",
+                   "/api/teams/register"}
         if path not in allowed:
             self.send_error(404)
             return
@@ -307,8 +326,12 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(429, {"ok": False, "error": "Validation busy; retry shortly"})
             return
         try:
-            if path == "/api/lead/github/verify":
-                self.send_json(200, {"ok": True, **project_connections.verify_github_connection(payload.get("role"))})
+            if path == "/api/teams/register":
+                self.send_json(200, {"ok": True, "team": team_registry.register(payload)})
+            elif path == "/api/lead/github/connect":
+                self.send_json(200, {"ok": True, **project_connections.connect_github_token(payload.get("role"), payload.get("token"))})
+            elif path == "/api/lead/github/disconnect":
+                self.send_json(200, {"ok": True, **project_connections.disconnect_github_token(payload.get("role"))})
             elif path == "/api/lead/dbt/projects":
                 result = project_connections.preview_account(
                     payload.get("role"), payload)
@@ -362,7 +385,9 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         try:
-            if path == "/api/health":
+            if path == "/api/teams":
+                self.send_json(200, {"ok": True, "roles": team_registry.list_roles()})
+            elif path == "/api/health":
                 self.send_json(200, {"status": "ready", "engine": "dbt-core",
                                      "workspaceReady": (team_portal.project_path() / "dbt_project.yml").is_file()})
             elif path == "/api/dbt/status":
