@@ -93,3 +93,18 @@
 .workspace-sidebar-collapsed .sidebar-toggle-row{justify-content:center}
 .workspace-sidebar-collapsed .main-content{min-width:0;flex:1}
 @media(max-width:550px){.workspace-sidebar-collapsed .sidebar{width:100%;padding:10px 15px}.workspace-sidebar-collapsed .sidebar-toggle-row{justify-content:flex-start;margin:0}}
+
+/* Fill the browser's remaining vertical space in CDO canvas view. The header
+   stays above .app-shell, so the available height excludes the shared topbar. */
+.app-shell:has(.canvas-main-content){min-height:calc(100vh - 70px);min-height:calc(100dvh - 70px)}
+.workspace:has(.canvas-main-content){min-height:calc(100vh - 70px);min-height:calc(100dvh - 70px)}
+.canvas-main-content{display:flex;flex-direction:column;min-height:calc(100vh - 70px);min-height:calc(100dvh - 70px);padding-bottom:20px}
+.canvas-main-content>.graph-area{display:flex;flex:1 1 auto;min-height:400px;margin-top:18px}
+.canvas-main-content>.graph-area>.lineage-wrapper{flex:1;min-height:400px;height:auto;min-width:0}
+.canvas-main-content .canvas-viewport{min-height:0}
+@media(max-width:550px){
+  .app-shell:has(.canvas-main-content),.workspace:has(.canvas-main-content){min-height:calc(100dvh - 60px)}
+  .canvas-main-content{min-height:calc(100dvh - 60px);padding-bottom:14px}
+  .canvas-main-content>.graph-area{min-height:360px}
+  .canvas-main-content>.graph-area>.lineage-wrapper{min-height:360px}
+}

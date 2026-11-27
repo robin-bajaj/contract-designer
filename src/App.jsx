@@ -139,7 +139,7 @@ function App() {
         <div className="sidebar-bottom"><button className="outline stretch" onClick={() => importRef.current?.click()}><Upload size={15}/> Import contract YAML</button><input ref={importRef} accept=".yml,.yaml,text/yaml" type="file" hidden onChange={importContract}/><p>Only approved contracts on governance GitHub main appear here. Unpublished work remains in the editor; export YAML as a backup before leaving or publish through a PR.</p></div>
         </>}
       </aside>
-      <main className="main-content">
+      <main className={`main-content ${view === 'canvas' ? 'canvas-main-content' : ''}`}>
         {notice && <div className="notice"><CircleAlert size={16}/><span>{notice}</span><button className="icon-quiet" onClick={() => setNotice('')}><X size={15}/></button></div>}
         {view === 'canvas' ? <>
           <div className="page-head"><h1>My Contracts</h1></div>

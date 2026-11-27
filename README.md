@@ -206,3 +206,7 @@ The CDO explorer panel has a collapse/expand chevron at the top. When collapsed 
 On the lineage canvas, **double-clicking a contract** displays the same **View Contract** and **Create Child Contract** options as right-clicking it. Right-clicking blank canvas still offers standalone contract creation, while left-drag continues to move nodes/pan. The left contract explorer supports right-click/double-click action menus too. In the explorer, click the desired menu action to open a contract.
 
 **Escape** closes canvas and explorer context menus and cancels an active canvas pointer interaction. On the contract editor, Escape returns to the canvas (unless a text input is focused, in which case the first Escape blurs that field). The common header and Team A/C views are unchanged.
+
+## Full-height CDO canvas
+
+The CDO contract canvas now expands vertically to use the available browser viewport below the shared header, instead of stopping at a fixed 620px height. The canvas toolbar stays attached to the top of the canvas, and pan/zoom, double-click menus, and sidebar collapse remain supported. For smaller viewports, minimum heights preserve usable canvas space; the page scrolls only when needed. The contract editor and Team A/C screens retain their existing layouts.
