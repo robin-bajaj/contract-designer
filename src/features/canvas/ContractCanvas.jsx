@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Maximize2, Minus, Plus, RotateCcw, Move, MousePointer2, Eye, GitBranch } from 'lucide-react'
+import { Maximize2, Minus, Plus, RotateCcw, Move, Eye, GitBranch } from 'lucide-react'
 import { canvasContextAction, positionCanvasMenu } from './canvasActions.js'
 import { createLineageLayout, lineageEdges, NODE_WIDTH, NODE_HEIGHT } from './lineage.js'
 
@@ -39,22 +39,38 @@ export default function ContractCanvas({ contracts, onOpen, onCreateStandalone, 
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(overrides)) } catch { /* optional */ }
   }, [overrides])
 
+  const centerAt = useCallback((scale = 1) => {
+    if (!viewport.current) return
+    const { width, height } = viewport.current.getBoundingClientRect()
+    const pts = Object.values(positions)
+    if (!pts.length) { setView({ x: 0, y: 0, scale }); return }
+    const left = Math.min(...pts.map(p => p.x))
+    const top = Math.min(...pts.map(p => p.y))
+    const right = Math.max(...pts.map(p => p.x + NODE_WIDTH))
+    const bottom = Math.max(...pts.map(p => p.y + NODE_HEIGHT))
+    setView({
+      x: (width - (left + right) * scale) / 2,
+      y: (height - (top + bottom) * scale) / 2,
+      scale,
+    })
+  }, [positions])
   const fit = useCallback(() => {
     if (!viewport.current) return
     const { width, height } = viewport.current.getBoundingClientRect()
     const pts = Object.values(positions)
-    if (!pts.length) { setView({ x: 0, y: 0, scale: 1 }); return }
+    if (!pts.length) { centerAt(1); return }
     const left = Math.min(...pts.map(p => p.x))
     const top = Math.min(...pts.map(p => p.y))
     const right = Math.max(...pts.map(p => p.x + NODE_WIDTH))
     const bottom = Math.max(...pts.map(p => p.y + NODE_HEIGHT))
     const scale = clamp(Math.min((width - 80) / (right - left), (height - 80) / (bottom - top), 1.2), MIN_SCALE, MAX_SCALE)
-    setView({ x: (width - (left + right) * scale) / 2, y: (height - (top + bottom) * scale) / 2, scale })
-  }, [positions])
+    centerAt(scale)
+  }, [positions, centerAt])
 
-  // Refit when the visible contract set changes; do not refit on every drag.
+  // Default to true 100% zoom, centered on the graph, rather than auto-fit.
+  // Fit is now explicitly requested through the expand-arrows toolbar button.
   const ids = contracts.map(c => c.id).join('|')
-  useEffect(() => { fit() }, [ids]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { centerAt(1) }, [ids]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const zoomAt = (scaleFactor, x, y) => setView(v => {
     const scale = clamp(v.scale * scaleFactor, MIN_SCALE, MAX_SCALE)
@@ -134,15 +150,14 @@ export default function ContractCanvas({ contracts, onOpen, onCreateStandalone, 
   const reset = () => {
     setOverrides({})
     try { localStorage.removeItem(STORAGE_KEY) } catch { /* optional */ }
-    const box = viewport.current?.getBoundingClientRect()
-    if (box) {
-      const pts = Object.values(auto.positions)
-      if (!pts.length) { setView({ x: 0, y: 0, scale: 1 }); return }
-      const left = Math.min(...pts.map(p => p.x)), top = Math.min(...pts.map(p => p.y))
-      const right = Math.max(...pts.map(p => p.x + NODE_WIDTH)), bottom = Math.max(...pts.map(p => p.y + NODE_HEIGHT))
-      const scale = clamp(Math.min((box.width - 80) / (right - left), (box.height - 80) / (bottom - top), 1.2), MIN_SCALE, MAX_SCALE)
-      setView({ x: (box.width - (left + right) * scale) / 2, y: (box.height - (top + bottom) * scale) / 2, scale })
-    }
+    // Reset to the auto-layout at actual 100%, not the prior saved zoom.
+    const pts = Object.values(auto.positions)
+    if (!pts.length) { setView({ x: 0, y: 0, scale: 1 }); return }
+    const rect = viewport.current?.getBoundingClientRect()
+    if (!rect) return
+    const left = Math.min(...pts.map(p => p.x)), top = Math.min(...pts.map(p => p.y))
+    const right = Math.max(...pts.map(p => p.x + NODE_WIDTH)), bottom = Math.max(...pts.map(p => p.y + NODE_HEIGHT))
+    setView({x:(rect.width-left-right)/2,y:(rect.height-top-bottom)/2,scale:1})
   }
   useEffect(() => {
     const element = viewport.current
@@ -162,12 +177,12 @@ export default function ContractCanvas({ contracts, onOpen, onCreateStandalone, 
   }, [])
   return <div className="lineage-wrapper">
     <div className="canvas-toolbar" role="toolbar" aria-label="Canvas controls">
-      <span className="canvas-hint"><Move size={15}/> Left-drag to move / pan · Right-click or double-click for options</span>
-      <button title="Zoom out" aria-label="Zoom out" onClick={() => zoomAt(1 / 1.2, (viewport.current?.clientWidth || 800) / 2, (viewport.current?.clientHeight || 550) / 2)}><Minus size={17}/></button>
-      <span className="zoom-level">{Math.round(view.scale * 100)}%</span>
-      <button title="Zoom in" aria-label="Zoom in" onClick={() => zoomAt(1.2, (viewport.current?.clientWidth || 800) / 2, (viewport.current?.clientHeight || 550) / 2)}><Plus size={17}/></button>
-      <button title="Fit all contracts" aria-label="Fit all contracts" onClick={fit}><Maximize2 size={16}/></button>
-      <button title="Reset saved card positions" aria-label="Reset positions" onClick={reset}><RotateCcw size={16}/></button>
+      <span className="canvas-hint"><Move size={15}/> Drag to move or pan · Right-click / double-click for options · Esc to close</span>
+      <button title="Zoom out (decrease canvas scale)" aria-label="Zoom out" onClick={() => zoomAt(1 / 1.2, (viewport.current?.clientWidth || 800) / 2, (viewport.current?.clientHeight || 550) / 2)}><Minus size={17}/></button>
+      <span className="zoom-level" title="Current canvas zoom level">{Math.round(view.scale * 100)}%</span>
+      <button title="Zoom in (increase canvas scale)" aria-label="Zoom in" onClick={() => zoomAt(1.2, (viewport.current?.clientWidth || 800) / 2, (viewport.current?.clientHeight || 550) / 2)}><Plus size={17}/></button>
+      <button title="Fit all contracts into view" aria-label="Fit all contracts" onClick={fit}><Maximize2 size={16}/></button>
+      <button title="Reset card positions and zoom to 100%" aria-label="Reset positions" onClick={reset}><RotateCcw size={16}/></button>
     </div>
     <div className="canvas-viewport" ref={viewport} onPointerDown={e => start(e, 'pan')} onPointerMove={move} onPointerUp={end} onPointerCancel={end} onContextMenu={e => openContext(e, 'pan')} aria-label="Interactive contract lineage canvas" tabIndex={0} onKeyDown={e => openKeyboardContext(e, 'pan')}>
       <div className="canvas-world" style={{ width: bounds.width, height: bounds.height, transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }}>
@@ -182,7 +197,6 @@ export default function ContractCanvas({ contracts, onOpen, onCreateStandalone, 
           <button type="button" onClick={() => {const c=contracts.find(c => c.id === contextMenu.id);setContextMenu(null);if(c)onCreateChild(c)}}><GitBranch size={16}/> Create Child Contract</button>
         </>}
       </div>}
-      <div className="canvas-mode"><MousePointer2 size={13}/> Left-drag to move · Right-click / double-click for options · Esc to close</div>
     </div>
   </div>
 }
