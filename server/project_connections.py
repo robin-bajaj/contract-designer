@@ -22,7 +22,7 @@ from urllib.request import Request, urlopen
 
 import yaml
 from cryptography.fernet import Fernet, InvalidToken
-from . import dbt_cloud, team_portal
+from . import dbt_cloud, team_portal, github_app
 
 TEAM_PREFIX = {"team-a": "team_a", "team-c": "team_c"}
 GITHUB_REPO = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
@@ -54,11 +54,12 @@ def connect():
         updated_at TEXT NOT NULL,
         account_id INTEGER,
         api_host TEXT,
-        token_ciphertext TEXT
+        token_ciphertext TEXT,
+        github_installation_id INTEGER
     )""")
     # Forward-only migration for anyone who tried the original PR #32 branch.
     columns = {r[1] for r in conn.execute("PRAGMA table_info(project_connections)")}
-    for col, kind in (("account_id", "INTEGER"), ("api_host", "TEXT"), ("token_ciphertext", "TEXT")):
+    for col, kind in (("account_id", "INTEGER"), ("api_host", "TEXT"), ("token_ciphertext", "TEXT"), ("github_installation_id", "INTEGER")):
         if col not in columns:
             conn.execute(f"ALTER TABLE project_connections ADD COLUMN {col} {kind}")
     return conn
@@ -114,6 +115,7 @@ def _clean(row) -> dict | None:
         "subdirectory": row["subdirectory"],
         "accountId": row["account_id"], "apiHost": row["api_host"],
         "updatedAt": row["updated_at"],
+        "githubConnected": bool(row["github_installation_id"]),
         # Never expose ciphertext, token, warehouse connection attributes.
     }
 
@@ -250,7 +252,8 @@ def assign(role: str, payload: dict) -> dict:
           repository=excluded.repository,branch=excluded.branch,
           subdirectory=excluded.subdirectory,updated_at=excluded.updated_at,
           account_id=excluded.account_id,api_host=excluded.api_host,
-          token_ciphertext=excluded.token_ciphertext""", (
+          token_ciphertext=excluded.token_ciphertext,
+          github_installation_id=CASE WHEN project_connections.repository=excluded.repository THEN project_connections.github_installation_id ELSE NULL END""", (
             role, preview["id"], preview["name"], environment_id, selected["name"],
             preview["repository"], preview["defaultBranch"], preview["subdirectory"],
             team_portal.now(), cred["accountId"], cred["host"], encrypted,
@@ -271,8 +274,43 @@ def connection_secret(role: str) -> dict:
     }
 
 
+def github_connection_status(role: str) -> dict:
+    require_team(role)
+    connection = connection_for(role)
+    return {
+        "configured": github_app.configured(),
+        "installUrl": github_app.installation_url(),
+        "repository": connection["repository"] if connection else None,
+        "connected": bool(connection and connection["githubConnected"]),
+    }
+
+
+def verify_github_connection(role: str) -> dict:
+    require_team(role)
+    connection = connection_for(role)
+    if connection is None:
+        raise team_portal.PortalError("Connect your existing dbt project first", 409)
+    if not github_app.configured():
+        raise team_portal.PortalError("Platform administrator must configure the GitHub App first", 503)
+    installation_id = github_app.verify_repository(connection["repository"])
+    with connect() as db:
+        db.execute("UPDATE project_connections SET github_installation_id=?,updated_at=? WHERE role=? AND repository=?",
+                   (installation_id, team_portal.now(), role, connection["repository"]))
+    return github_connection_status(role)
+
+
 def _github(path: str) -> dict:
     token = os.environ.get("PORTAL_GITHUB_READ_TOKEN", "").strip()
+    match = re.match(r"^/repos/([^/?]+/[^/?]+)(?:/|$)", path)
+    if match:
+        repo = match.group(1)
+        with connect() as db:
+            row = db.execute(
+                "SELECT github_installation_id FROM project_connections WHERE lower(repository)=lower(?) AND github_installation_id IS NOT NULL LIMIT 1",
+                (repo,)
+            ).fetchone()
+        if row and github_app.configured():
+            token = github_app.token_for_installation(row["github_installation_id"])
     # Public projects can be discovered without a token. For private GitHub
     # repositories, an administrator grants this backend read-only access.
     request = Request("https://api.github.com" + path, headers={
