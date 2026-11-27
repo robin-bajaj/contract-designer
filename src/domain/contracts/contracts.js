@@ -2,6 +2,11 @@ import { metricAggregationError } from './dbtOptions.js'
 
 export function toContractDocument(contract) {
   const out = { name: contract.name, version: Number(contract.version) || 1 }
+  // The current CDO registry accepts top-level description on standalone contracts.
+  // Child contracts use a strict name/version/uses/include schema for now.
+  if (!contract.uses && typeof contract.description === 'string' && contract.description.trim()) {
+    out.description = contract.description.trim()
+  }
   if (contract.uses) {
     out.uses = { name: contract.uses.name, version: Number(contract.uses.version) || 1 }
     out.include = { attributes: contract.include?.attributes || [], metrics: contract.include?.metrics || [] }
