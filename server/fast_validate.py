@@ -16,7 +16,7 @@ import tempfile
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
-from . import team_portal
+from . import team_portal, dbt_cloud
 
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("FAST_VALIDATE_PORT", "8765"))
@@ -228,8 +228,14 @@ def validate_dbt(payload: object, *, runner=run_command) -> dict:
 
 
 class Handler(BaseHTTPRequestHandler):
+    """Loopback-only POC gateway: portal drafts, dbt Core, dbt Cloud metadata."""
+
     def do_POST(self):
-        if self.path not in ("/api/validate/fast", "/api/validate/staging"):
+        path = urlparse(self.path).path
+        allowed = {"/api/validate/fast", "/api/validate/staging",
+                   "/api/team-models/save", "/api/team-models/validate",
+                   "/api/team-models/publish", "/api/dbt/jobs/run"}
+        if path not in allowed:
             self.send_error(404)
             return
         try:
@@ -237,36 +243,88 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             count = 0
         if count <= 0 or count > MAX_BODY:
-            self.send_error(413, "Invalid request size")
+            self.send_json(413, {"ok": False, "error": "Invalid request size"})
             return
         try:
             payload = json.loads(self.rfile.read(count))
-            if self.path == "/api/validate/staging":
-                if not isinstance(payload, dict):
-                    raise ValueError("Expected object")
-                payload["validationScope"] = "staging"
+            if not isinstance(payload, dict):
+                raise ValueError("Expected JSON object")
         except (ValueError, UnicodeError):
-            self.send_error(400, "Invalid JSON")
+            self.send_json(400, {"ok": False, "error": "Invalid JSON"})
             return
-        if not SLOTS.acquire(blocking=False):
-            self.send_json(429, {"ok": False, "error": "Validation service busy; retry shortly"})
+        validation = path in ("/api/validate/fast", "/api/validate/staging", "/api/team-models/validate")
+        if validation and not SLOTS.acquire(blocking=False):
+            self.send_json(429, {"ok": False, "error": "Validation busy; retry shortly"})
             return
         try:
-            try:
+            if path == "/api/team-models/save":
+                self.send_json(200, {"ok": True, "draft": team_portal.save_draft(payload)})
+            elif path == "/api/team-models/publish":
+                result = team_portal.publish_draft(payload.get("id", ""))
+                self.send_json(200, {"ok": True, **result})
+            elif path == "/api/team-models/validate":
+                draft = team_portal.load_draft(payload.get("id", ""))
+                data = team_portal.validate_input(draft)
+                result = validate_dbt(data)
+                if result.get("ok"):
+                    result["draft"] = team_portal.mark_validated(draft["id"], result)
+                self.send_json(200 if result["ok"] else 422, result)
+            elif path in ("/api/validate/fast", "/api/validate/staging"):
+                if path == "/api/validate/staging":
+                    payload["validationScope"] = "staging"
                 result = validate_dbt(payload)
                 self.send_json(200 if result["ok"] else 422, result)
-            except InputError as exc:
-                self.send_json(400, {"ok": False, "error": str(exc), "steps": []})
-            except Exception:
-                self.send_json(500, {"ok": False, "error": "Backend validation failed unexpectedly", "steps": []})
+            elif path == "/api/dbt/jobs/run":
+                if os.environ.get("DBT_CLOUD_ENABLE_RUNS") != "1":
+                    raise team_portal.PortalError("Remote job triggers are disabled; set DBT_CLOUD_ENABLE_RUNS=1 explicitly", 403)
+                self.send_json(200, {"ok": True, "remote": True,
+                                     "result": dbt_cloud.trigger_configured_job()})
+        except team_portal.PortalError as exc:
+            self.send_json(exc.status, {"ok": False, "error": str(exc)})
+        except InputError as exc:
+            self.send_json(400, {"ok": False, "error": str(exc)})
+        except dbt_cloud.DbtCloudError as exc:
+            self.send_json(502, {"ok": False, "error": str(exc)})
+        except Exception:
+            self.send_json(500, {"ok": False, "error": "Backend operation failed"})
         finally:
-            SLOTS.release()
+            if validation:
+                SLOTS.release()
 
     def do_GET(self):
-        if self.path == "/api/health":
-            self.send_json(200, {"status": "ready", "engine": "dbt-core"})
-        else:
-            self.send_error(404)
+        parsed = urlparse(self.path)
+        path = parsed.path
+        try:
+            if path == "/api/health":
+                self.send_json(200, {"status": "ready", "engine": "dbt-core",
+                                     "projectConfigured": bool(team_portal.project_path())})
+            elif path == "/api/dbt/status":
+                project = team_portal.project_path()
+                self.send_json(200, {
+                    "dbtCoreAvailable": bool(shutil.which("dbt")),
+                    "localProjectConfigured": bool(project and (project / "dbt_project.yml").is_file()),
+                    "remoteAdminConfigured": dbt_cloud.configured(),
+                    "remoteRunsEnabled": os.environ.get("DBT_CLOUD_ENABLE_RUNS") == "1",
+                    "publishingMode": "local-dbt-project-only",
+                })
+            elif path == "/api/team-models":
+                role = parse_qs(parsed.query).get("role", [""])[0]
+                self.send_json(200, {"models": team_portal.list_drafts(role)})
+            elif path == "/api/team-models/sources":
+                role = parse_qs(parsed.query).get("role", [""])[0]
+                self.send_json(200, {"sources": team_portal.source_models(role)})
+            elif path == "/api/dbt/jobs":
+                self.send_json(200, {"ok": True, "result": dbt_cloud.jobs()})
+            elif path.startswith("/api/dbt/runs/"):
+                self.send_json(200, {"ok": True, "result": dbt_cloud.run_status(path.rsplit("/", 1)[-1])})
+            else:
+                self.send_error(404)
+        except team_portal.PortalError as exc:
+            self.send_json(exc.status, {"ok": False, "error": str(exc)})
+        except dbt_cloud.DbtCloudError as exc:
+            self.send_json(502, {"ok": False, "error": str(exc)})
+        except Exception:
+            self.send_json(500, {"ok": False, "error": "Backend operation failed"})
 
     def send_json(self, status, payload):
         body = json.dumps(payload).encode("utf-8")
@@ -278,7 +336,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def log_message(self, format, *args):
-        # Never log submitted SQL/YAML or tokens.
+        # Never log submitted SQL/YAML or access tokens.
         return
 
 
