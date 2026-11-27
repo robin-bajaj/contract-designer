@@ -250,7 +250,10 @@ def _tree(row: dict) -> tuple[list[dict], str]:
     sha = info.get("commit", {}).get("sha")
     if not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{40}", sha):
         raise team_portal.PortalError("Could not verify Git revision", 502)
-    body = _github(f"/repos/{repo}/git/trees/{sha}?recursive=1")
+    tree_sha = (info.get("commit", {}).get("commit", {}).get("tree") or {}).get("sha")
+    if not isinstance(tree_sha, str) or not re.fullmatch(r"[0-9a-f]{40}", tree_sha):
+        raise team_portal.PortalError("Could not verify Git repository tree", 502)
+    body = _github(f"/repos/{repo}/git/trees/{tree_sha}?recursive=1")
     if body.get("truncated"):
         raise team_portal.PortalError("Project file catalog was truncated; ask the administrator to configure a narrower repository", 422)
     return [item for item in body.get("tree", []) if item.get("type") == "blob"
