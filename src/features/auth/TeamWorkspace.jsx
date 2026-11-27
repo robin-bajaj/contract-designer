@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { AlertCircle, CheckCircle2, Database, GitBranch, Plus, RefreshCw } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Database, GitBranch, Plus, RefreshCw, FileCode2, FileText, X, Copy, Check, FolderOpen, ExternalLink } from 'lucide-react'
 import { ROLE_OPTIONS } from './roles.js'
 import { parseTeamSemanticFile } from '../../services/github/teamSemanticRegistry.js'
 import { listPortalModels, listPortalSources, deletePortalDraft, dbtBackendStatus } from '../../services/portal/teamPortalApi.js'
@@ -112,6 +112,7 @@ export default function TeamWorkspace({ role }) {
   const [selectedId, setSelectedId] = useState(null)
   const [generation, setGeneration] = useState(0)
   const [draftActionError, setDraftActionError] = useState('')
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -146,6 +147,7 @@ export default function TeamWorkspace({ role }) {
   },[role,generation])
 
   const openConnectedFile=async path=>{
+    setCopied(false)
     setOpenedFile(null);setOpenedFileError('');setOpenedFileLoading(true)
     try{
       const file=await teamConnectedFile(role,path)
@@ -218,28 +220,61 @@ export default function TeamWorkspace({ role }) {
             : <p className="dbt-backend-warning">Connect your project to browse files.</p>}
         </aside>
         <div className="dbt-studio-main">
-      <section className="team-detail-section team-connected-project" aria-label="Connected dbt Cloud project inventory">
-        <h3><GitBranch size={18}/> Connected dbt project</h3>
-        {catalogLoading && <p role="status">Discovering models from the connected project…</p>}
+      <section className="team-detail-section team-connected-project dbt-editor-shell" aria-label="Connected dbt Cloud project inventory">
+        {catalogLoading && <p role="status">Discovering source files from your connected project…</p>}
         {catalogError && <p className="team-error" role="alert">Unable to discover the connected project: {catalogError}</p>}
-        {!catalogLoading && !catalogError && !connectedCatalog?.connection && <p>No dbt Cloud project connected yet. Ask your CDO administrator to connect an existing project.</p>}
+        {!catalogLoading && !catalogError && !connectedCatalog?.connection && <div className="dbt-editor-placeholder"><Database size={28}/><strong>Connect a dbt Cloud project</strong><span>Choose an existing project to browse its committed files.</span></div>}
         {connectedCatalog?.connection && <>
-          <div className="team-connected-summary">
-            <div><span>dbt project</span><strong>{connectedCatalog.connection.projectName}</strong></div>
-            <div><span>Environment</span><strong>{connectedCatalog.connection.environmentName}</strong></div>
-            <div><span>Connected GitHub repository</span><strong>{connectedCatalog.connection.repository}</strong></div>
-            <div><span>Discovered staging models</span><strong>{connectedCatalog.sources.length}</strong></div>
+          <div className="dbt-editor-project-bar">
+            <div className="dbt-editor-project-identity">
+              <span className="dbt-project-mark"><Database size={19}/></span>
+              <div>
+                <strong>{connectedCatalog.connection.projectName}</strong>
+                <small>{connectedCatalog.connection.repository}</small>
+              </div>
+            </div>
+            <div className="dbt-editor-project-meta">
+              <span title="dbt Cloud environment"><Database size={13}/>{connectedCatalog.connection.environmentName}</span>
+              <span title="Committed source files"><FileCode2 size={13}/>{discoveredFiles.length} files</span>
+              <span title="Current Git revision"><GitBranch size={13}/>{connectedCatalog.revision?.slice(0,7)||'—'}</span>
+              <span className="dbt-readonly-pill">Read-only</span>
+            </div>
           </div>
-          <p>Existing definitions are read from the connected repository. Database credentials stay in dbt Cloud. These previews are read-only; validation and remote editing integration will follow.</p>
-          <p>Select a project file from the left sidebar to inspect its source.</p>
-          <div className="team-editor-toolbar"><button type="button" className="primary team-create-button" onClick={()=>{setEditing(null);setCreating(true)}}><Plus size={15}/> Create model draft</button><span>Read-only repository browser</span></div>
-          {openedFileLoading && <p role="status">Opening file…</p>}
+          <div className="dbt-editor-file-toolbar">
+            <div className="dbt-editor-file-path">
+              {openedFile ? <><FileCode2 size={16}/><strong>{openedFile.path.split('/').at(-1)}</strong><small>{openedFile.path}</small></> :
+                <><FolderOpen size={16}/><strong>Project files</strong><small>Choose a file from the explorer</small></>}
+            </div>
+            <div className="dbt-editor-file-actions">
+              {openedFile && <>
+                <button type="button" className="outline" onClick={async()=>{try { await navigator.clipboard.writeText(openedFile.content);setCopied(true) } catch { setCopied(false) }}}><Copy size={14}/>{copied ? 'Copied' : 'Copy'}</button>
+                <button type="button" className="outline" onClick={()=>setOpenedFile(null)}><X size={14}/>Close</button>
+              </>}
+              <button type="button" className="primary" onClick={()=>{setEditing(null);setCreating(true)}}><Plus size={14}/>New model draft</button>
+            </div>
+          </div>
+          {openedFileLoading && <div className="dbt-editor-loading" role="status">Opening source file…</div>}
           {openedFileError && <p className="team-error" role="alert">{openedFileError}</p>}
-          {!openedFile && !openedFileLoading && <div className="dbt-editor-placeholder"><Database size={28}/><strong>No file selected</strong><span>Choose a SQL, YAML, or other supported source file from the left project explorer.</span></div>}
-          {openedFile && <div className="team-connected-file">
-            <div><strong>{openedFile.path}</strong><button className="outline" onClick={()=>setOpenedFile(null)} type="button">Close file</button></div>
-            <pre aria-label="Connected project source">{openedFile.content}</pre>
+          {!openedFile && !openedFileLoading && <div className="dbt-editor-welcome">
+            <div className="dbt-editor-welcome-icon"><FileText size={30}/></div>
+            <h3>Start with a project file</h3>
+            <p>Explore the connected dbt project on the left. Select any SQL, YAML, seed or configuration file to inspect its committed source.</p>
+            <div className="dbt-editor-quicklinks">
+              {discoveredFiles.filter(path=>path.endsWith('dbt_project.yml')).slice(0,1).map(path=>
+                <button key={path} type="button" className="outline" onClick={()=>openConnectedFile(path)}>Open dbt_project.yml</button>)}
+              {discoveredFiles.filter(path=>/\/semantic_models\/.*\.ya?ml$/.test(path)).slice(0,1).map(path=>
+                <button key={path} type="button" className="outline" onClick={()=>openConnectedFile(path)}>View semantic YAML</button>)}
+            </div>
+            <small>Repository files are read-only. Drafts are currently stored in the local portal and are not pushed to GitHub.</small>
           </div>}
+          {openedFile && <div className="dbt-code-viewer" aria-label="Connected project source">
+            <div className="dbt-code-gutter" aria-hidden="true">{openedFile.content.split('\n').map((_,i)=><span key={i}>{i+1}</span>)}</div>
+            <pre><code>{openedFile.content}</code></pre>
+          </div>}
+          <footer className="dbt-editor-footer">
+            <span><GitBranch size={13}/> GitHub source · {connectedCatalog.revision?.slice(0,7)||'latest'}</span>
+            <span>{openedFile ? openedFile.content.split('\n').length+' lines' : 'No file open'}</span>
+          </footer>
         </>}
       </section>
       {loading && <div className="team-loading" role="status">Loading your models and approved contracts…</div>}
