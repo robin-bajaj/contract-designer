@@ -60,22 +60,26 @@ def _team_connection(role: str) -> tuple[dict, str]:
     token = project_connections._decrypt(row["github_token_ciphertext"])
     return conn, token
 
-def publish(draft: dict, compiled_yaml: str) -> dict:
+def publish(draft: dict, authored_yaml: str, *, expected_revision: str, expected_repository: str) -> dict:
     """Create a GitHub feature branch with one atomic Git commit, then a PR.
 
-    No existing repository paths may be overwritten. The draft must have passed
-    compiler/dbt validation immediately before this method is invoked.
+    No existing repository paths may be overwritten. Publication is pinned to
+    the exact repository revision whose complete dbt project was validated.
     """
     role = draft["role"]
     connection, token = _team_connection(role)
     repo = connection["repository"]
+    if repo != expected_repository:
+        raise team_portal.PortalError("Connected repository changed; validate the model again", 409)
+    if not isinstance(expected_revision, str) or not _SHA.fullmatch(expected_revision):
+        raise team_portal.PortalError("A verified Git revision is required before publishing", 409)
     base_branch = connection["branch"]
     subdir = connection["subdirectory"]
     team = team_ids.folder(role)
     if not _SEGMENT.fullmatch(base_branch) or not isinstance(subdir,str):
         raise team_portal.PortalError("Unsupported linked Git branch or project subdirectory", 422)
     paths = {
-        subdir + f"models/semantic_models/{team}/{draft['semanticName']}.yml": compiled_yaml
+        subdir + f"models/semantic_models/{team}/{draft['semanticName']}.yml": authored_yaml
     }
     sql_path = subdir + f"models/staging/{team}/{draft['sourceModel']}.sql"
     if draft["sourceMode"] == "new":
@@ -89,6 +93,8 @@ def publish(draft: dict, compiled_yaml: str) -> dict:
     head = (branch.get("commit") or {}).get("sha")
     if not isinstance(head,str) or not _SHA.fullmatch(head):
         raise team_portal.PortalError("Unable to verify target Git branch", 502)
+    if head != expected_revision:
+        raise team_portal.PortalError("The connected Git branch changed after validation. Revalidate this draft before creating a PR.", 409)
     commit = get("/git/commits/" + head)
     tree_sha = (commit.get("tree") or {}).get("sha")
     if not isinstance(tree_sha,str) or not _SHA.fullmatch(tree_sha):
@@ -130,7 +136,7 @@ def publish(draft: dict, compiled_yaml: str) -> dict:
         "title":f"{role}: add {draft['semanticName']} semantic model",
         "head":feature,"base":base_branch,
         "body":("Portal generated files (source revision: `"+head[:12]+"`).\n\n"
-                "CDO compiler and dbt parse validation passed locally. "
+                "CDO compiler and dbt parse validation passed against the connected repository revision. "
                 "Review CI checks and CDO contract compliance before merging.\n\n"
                 "Files:\n" + "\n".join("- `"+path+"`" for path in paths))
     })
