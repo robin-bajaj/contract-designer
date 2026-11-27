@@ -140,7 +140,7 @@ export default function ProjectConnectionsAdmin({role,onBack}) {
     </section>}
     <section className="project-connect-panel" aria-label="GitHub token connection">
       <h2><GitBranch size={20}/> GitHub repository access</h2>
-      <p>Connect the exact repository already linked to this team's dbt project. Use a fine-grained GitHub personal access token restricted to that repository and <strong>Contents: Read-only</strong>.</p>
+      <p>Connect the exact repository already linked to this team's dbt project. Use a fine-grained GitHub personal access token restricted to that repository. For browsing, grant <strong>Contents: Read-only</strong>. To create model pull requests, grant <strong>Contents: Read and write</strong> and <strong>Pull requests: Read and write</strong>.</p>
       <div className="project-connect-summary">
         <div><strong>Linked repository</strong><span>{github?.repository||'Connect a dbt project first'}</span></div>
         <div><strong>GitHub access</strong><span>{github?.connected?'Connected (encrypted server-side)':'Not connected'}</span></div>

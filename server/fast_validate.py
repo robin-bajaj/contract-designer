@@ -247,6 +247,8 @@ def validate_dbt(payload: object, *, runner=run_command) -> dict:
 
 ONBOARDING_PATHS = frozenset({
     "/api/lead/dbt/projects", "/api/lead/dbt/preview", "/api/lead/dbt/connect",
+    "/api/lead/github/connect", "/api/lead/github/disconnect",
+    "/api/team-models/publish",
 })
 
 

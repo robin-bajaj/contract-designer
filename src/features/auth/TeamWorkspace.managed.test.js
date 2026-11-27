@@ -21,7 +21,7 @@ test('staging and semantic model authoring does not ask team users to configure 
   assert.match(editor,/1\. Staging model/)
   assert.match(editor,/Save Draft/)
   assert.match(editor,/Validate Model/)
-  assert.match(editor,/Publish Model/)
+  assert.match(editor,/Create GitHub PR/)
   assert.doesNotMatch(editor,/DBT_PROJECT_PATH|configured dbt project|Publish to dbt Project/)
 })
 

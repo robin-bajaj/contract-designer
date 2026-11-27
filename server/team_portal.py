@@ -1,7 +1,6 @@
-"""Portal-owned Team A/C drafts; validation-gated local dbt project publishing.
+"""Portal-owned Team A/C drafts and validation-gated GitHub PR publication.
 
-Only suitable for loopback development while roles are demonstrational.
-This module never contacts federated-semantic-poc or writes to GitHub.
+Local development only: real authentication/RBAC is required for deployment.
 """
 from __future__ import annotations
 
@@ -54,12 +53,17 @@ def connect():
         validated_digest TEXT,
         compiled_yaml TEXT,
         published_at TEXT,
+        pr_url TEXT,
+        pr_number INTEGER,
         updated_at TEXT NOT NULL
     )""")
     # Existing POC databases created before the draft-data feature are migrated.
     columns = {row[1] for row in conn.execute("PRAGMA table_info(drafts)")}
     if "draft_data" not in columns:
         conn.execute("ALTER TABLE drafts ADD COLUMN draft_data TEXT")
+    for column, sqltype in (("pr_url", "TEXT"), ("pr_number", "INTEGER")):
+        if column not in columns:
+            conn.execute(f"ALTER TABLE drafts ADD COLUMN {column} {sqltype}")
     return conn
 
 
@@ -115,12 +119,13 @@ def public(row: sqlite3.Row) -> dict:
         "sourceSql": row["source_sql"], "yamlText": row["yaml_text"],
         "draftData": json.loads(row["draft_data"] or "{}"),
         "publishedAt": row["published_at"], "updatedAt": row["updated_at"],
+        "prUrl": row["pr_url"], "prNumber": row["pr_number"],
     }
     try:
         current = digest(validate_input(item))
     except PortalError:
         current = None
-    item["status"] = ("published" if row["published_at"] and row["validated_digest"] == current
+    item["status"] = ("submitted" if row["pr_url"] and row["validated_digest"] == current
                       else "validated" if current is not None and row["validated_digest"] == current
                       else "draft")
     return item
@@ -153,8 +158,8 @@ def delete_draft(draft_id: str, role: str) -> None:
     draft = load_draft(draft_id)
     if draft["role"] != role:
         raise PortalError("Cannot delete another team's draft", 403)
-    if draft["status"] == "published":
-        raise PortalError("Published models cannot be deleted as drafts", 409)
+    if draft["status"] == "submitted":
+        raise PortalError("Drafts already submitted for GitHub review cannot be deleted", 409)
     with connect() as conn:
         conn.execute("DELETE FROM drafts WHERE id=? AND role=? AND published_at IS NULL",
                      (draft_id, role))
@@ -188,6 +193,8 @@ def save_draft(payload: object) -> dict:
         old = load_draft(requested_id)
         if old["role"] != data["role"]:
             raise PortalError("Cannot edit another team's draft", 403)
+        if old["status"] == "submitted":
+            raise PortalError("This model already has a GitHub PR. Create a new draft for additional changes.", 409)
     draft_id = requested_id or str(uuid.uuid4())
     before = load_draft(draft_id) if requested_id else None
     try:
@@ -204,9 +211,13 @@ def save_draft(payload: object) -> dict:
             conn.execute("""UPDATE drafts SET source_model=?,semantic_name=?,source_mode=?,
                 source_sql=?,yaml_text=?,draft_data=?,validated_digest=CASE WHEN ?=? THEN validated_digest ELSE NULL END,
                 compiled_yaml=CASE WHEN ?=? THEN compiled_yaml ELSE NULL END,
-                published_at=CASE WHEN ?=? THEN published_at ELSE NULL END,updated_at=? WHERE id=?""",
+                published_at=CASE WHEN ?=? THEN published_at ELSE NULL END,
+                pr_url=CASE WHEN ?=? THEN pr_url ELSE NULL END,
+                pr_number=CASE WHEN ?=? THEN pr_number ELSE NULL END,
+                updated_at=? WHERE id=?""",
                 (data["sourceModel"], data["semanticName"], data["sourceMode"], data["sourceSql"],
                  data["yamlText"], json.dumps(draft_data), previous_digest, new_digest, previous_digest, new_digest,
+                 previous_digest, new_digest, previous_digest, new_digest,
                  previous_digest, new_digest, now(), draft_id))
         else:
             conn.execute("""INSERT INTO drafts
@@ -221,10 +232,12 @@ def mark_validated(draft_id: str, result: dict) -> dict:
     draft = load_draft(draft_id)
     if not result.get("ok") or not result.get("compiledYaml"):
         raise PortalError("Only successful dbt validations with compiled YAML can be recorded", 409)
+    if draft["status"] == "submitted":
+        raise PortalError("Already submitted to GitHub; make a new draft for further changes", 409)
     current_digest = digest(validate_input(draft))
     with connect() as conn:
         conn.execute("""UPDATE drafts SET validated_digest=?,compiled_yaml=?,published_at=NULL,
-                        updated_at=? WHERE id=?""",
+                        pr_url=NULL,pr_number=NULL,updated_at=? WHERE id=?""",
                      (current_digest, result["compiledYaml"], now(), draft_id))
     return load_draft(draft_id)
 
@@ -240,54 +253,29 @@ def source_models(role: str) -> list[str]:
         if folder.exists():
             sources.update(p.stem for p in folder.glob("*.sql") if IDENTIFIER.fullmatch(p.stem))
     for draft in list_drafts(role):
-        if draft["status"] == "published":
+        if draft["status"] == "submitted":
             sources.add(draft["sourceModel"])
     return sorted(sources)
 
 
 def publish_draft(draft_id: str) -> dict:
-    """Publish validated native dbt files into the portal-managed workspace.
-
-    This does NOT push to Git or update the remote dbt Studio workspace.
-    """
-    project = project_path()
-    if not (project / "dbt_project.yml").is_file():
-        raise PortalError("Managed model workspace is unavailable", 503)
+    """Publish a successfully validated model to a GitHub PR, not local files."""
+    from . import github_publish
     draft = load_draft(draft_id)
     with connect() as conn:
-        row = conn.execute("SELECT validated_digest, compiled_yaml FROM drafts WHERE id=?",
-                           (draft_id,)).fetchone()
+        row = conn.execute(
+            "SELECT validated_digest, compiled_yaml, pr_url FROM drafts WHERE id=?",
+            (draft_id,)
+        ).fetchone()
     current_digest = digest(validate_input(draft))
     if not row or row["validated_digest"] != current_digest or not row["compiled_yaml"]:
         raise PortalError("Validate the latest draft with dbt Core before publishing", 409)
-    team = TEAMS[draft["role"]]
-    yaml_file = project / "models" / "semantic_models" / team / (draft["semanticName"] + ".yml")
-    sql_file = project / "models" / "staging" / team / (draft["sourceModel"] + ".sql")
-    files = [(yaml_file, row["compiled_yaml"])]
-    if draft["sourceMode"] == "new":
-        files.insert(0, (sql_file, draft["sourceSql"]))
-    elif not sql_file.is_file():
-        raise PortalError("Selected existing SQL model is missing from the configured dbt project", 409)
-
-    # Refuse overwrite, symlinks, paths escaping the configured dbt project.
-    for path, _ in files:
-        if not path.resolve().is_relative_to(project):
-            raise PortalError("Publication path escapes the configured project", 403)
-        if path.exists() or path.is_symlink():
-            raise PortalError(f"{path.name} already exists; editing existing dbt files is not supported yet", 409)
-    created = []
-    try:
-        for path, content in files:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            with path.open("x", encoding="utf-8") as file:
-                file.write(content)
-            created.append(path)
-    except Exception:
-        for path in created:
-            path.unlink(missing_ok=True)
-        raise
+    if row["pr_url"]:
+        raise PortalError("Draft was already submitted to GitHub: " + row["pr_url"], 409)
+    result = github_publish.publish(draft, row["compiled_yaml"])
     with connect() as conn:
-        conn.execute("UPDATE drafts SET published_at=?,updated_at=? WHERE id=?",
-                     (now(), now(), draft_id))
-    return {"status": "published-local", "paths": [str(path.relative_to(project)) for path, _ in files],
-            "message": "Model published to your portal workspace. Remote deployment is not yet connected."}
+        conn.execute(
+            "UPDATE drafts SET published_at=?,pr_url=?,pr_number=?,updated_at=? WHERE id=?",
+            (now(), result["prUrl"], result["prNumber"], now(), draft_id)
+        )
+    return result
