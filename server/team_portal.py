@@ -193,6 +193,8 @@ def save_draft(payload: object) -> dict:
         old = load_draft(requested_id)
         if old["role"] != data["role"]:
             raise PortalError("Cannot edit another team's draft", 403)
+        if old["status"] == "submitted":
+            raise PortalError("This model already has a GitHub PR. Create a new draft for additional changes.", 409)
     draft_id = requested_id or str(uuid.uuid4())
     before = load_draft(draft_id) if requested_id else None
     try:
@@ -209,9 +211,13 @@ def save_draft(payload: object) -> dict:
             conn.execute("""UPDATE drafts SET source_model=?,semantic_name=?,source_mode=?,
                 source_sql=?,yaml_text=?,draft_data=?,validated_digest=CASE WHEN ?=? THEN validated_digest ELSE NULL END,
                 compiled_yaml=CASE WHEN ?=? THEN compiled_yaml ELSE NULL END,
-                published_at=CASE WHEN ?=? THEN published_at ELSE NULL END,updated_at=? WHERE id=?""",
+                published_at=CASE WHEN ?=? THEN published_at ELSE NULL END,
+                pr_url=CASE WHEN ?=? THEN pr_url ELSE NULL END,
+                pr_number=CASE WHEN ?=? THEN pr_number ELSE NULL END,
+                updated_at=? WHERE id=?""",
                 (data["sourceModel"], data["semanticName"], data["sourceMode"], data["sourceSql"],
                  data["yamlText"], json.dumps(draft_data), previous_digest, new_digest, previous_digest, new_digest,
+                 previous_digest, new_digest, previous_digest, new_digest,
                  previous_digest, new_digest, now(), draft_id))
         else:
             conn.execute("""INSERT INTO drafts
@@ -226,10 +232,12 @@ def mark_validated(draft_id: str, result: dict) -> dict:
     draft = load_draft(draft_id)
     if not result.get("ok") or not result.get("compiledYaml"):
         raise PortalError("Only successful dbt validations with compiled YAML can be recorded", 409)
+    if draft["status"] == "submitted":
+        raise PortalError("Already submitted to GitHub; make a new draft for further changes", 409)
     current_digest = digest(validate_input(draft))
     with connect() as conn:
         conn.execute("""UPDATE drafts SET validated_digest=?,compiled_yaml=?,published_at=NULL,
-                        updated_at=? WHERE id=?""",
+                        pr_url=NULL,pr_number=NULL,updated_at=? WHERE id=?""",
                      (current_digest, result["compiledYaml"], now(), draft_id))
     return load_draft(draft_id)
 
