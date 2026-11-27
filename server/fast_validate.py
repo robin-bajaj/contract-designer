@@ -253,7 +253,8 @@ class Handler(BaseHTTPRequestHandler):
         allowed = {"/api/validate/fast", "/api/validate/staging",
                    "/api/team-models/save", "/api/team-models/validate",
                    "/api/team-models/publish", "/api/dbt/jobs/run",
-                   "/api/admin/project-connections"}
+                   "/api/lead/dbt/projects",
+                   "/api/lead/dbt/preview", "/api/lead/dbt/connect"}
         if path not in allowed:
             self.send_error(404)
             return
@@ -276,11 +277,18 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(429, {"ok": False, "error": "Validation busy; retry shortly"})
             return
         try:
-            if path == "/api/admin/project-connections":
-                project_connections.require_admin(self.headers.get("X-Portal-Admin-Key"))
-                saved = project_connections.assign(payload.get("role"),
-                       payload.get("projectId"), payload.get("environmentId"))
-                self.send_json(200, {"ok": True, "connection": saved})
+            if path == "/api/lead/dbt/projects":
+                result = project_connections.preview_account(
+                    payload.get("role"), self.headers.get("X-Portal-Lead-Key"), payload)
+                self.send_json(200, {"ok": True, **result})
+            elif path == "/api/lead/dbt/preview":
+                project = project_connections.preview_project(
+                    payload.get("role"), self.headers.get("X-Portal-Lead-Key"), payload)
+                self.send_json(200, {"ok": True, "project": project})
+            elif path == "/api/lead/dbt/connect":
+                connection = project_connections.assign(
+                    payload.get("role"), self.headers.get("X-Portal-Lead-Key"), payload)
+                self.send_json(200, {"ok": True, "connection": connection})
             elif path == "/api/team-models/save":
                 self.send_json(200, {"ok": True, "draft": team_portal.save_draft(payload)})
             elif path == "/api/team-models/publish":
@@ -335,16 +343,6 @@ class Handler(BaseHTTPRequestHandler):
                     "projectConnectionAvailable": dbt_cloud.configured(),
                     "remoteRunsEnabled": os.environ.get("DBT_CLOUD_ENABLE_RUNS") == "1",
                 })
-            elif path == "/api/admin/project-connections/projects":
-                project_connections.require_admin(self.headers.get("X-Portal-Admin-Key"))
-                self.send_json(200, {"projects": project_connections.project_choices(),
-                                     "connections": project_connections.all_connections()})
-            elif path == "/api/admin/project-connections/preview":
-                project_connections.require_admin(self.headers.get("X-Portal-Admin-Key"))
-                project_id = parse_qs(parsed.query).get("projectId", [""])[0]
-                if not project_id.isdigit():
-                    raise team_portal.PortalError("Select a valid dbt project", 400)
-                self.send_json(200, {"project": project_connections.project_preview(int(project_id))})
             elif path == "/api/team-models/connected":
                 role = parse_qs(parsed.query).get("role", [""])[0]
                 self.send_json(200, project_connections.inventory(role))
@@ -353,9 +351,6 @@ class Handler(BaseHTTPRequestHandler):
                 role = query.get("role", [""])[0]
                 file_path = query.get("path", [""])[0]
                 self.send_json(200, project_connections.model_file(role, file_path))
-            elif path == "/api/project-connections":
-                role = parse_qs(parsed.query).get("role", [""])[0]
-                self.send_json(200, {"connection": project_connections.connection_for(role)})
             elif path == "/api/team-models":
                 role = parse_qs(parsed.query).get("role", [""])[0]
                 self.send_json(200, {"models": team_portal.list_drafts(role)})
