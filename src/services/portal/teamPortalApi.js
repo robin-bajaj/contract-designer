@@ -22,6 +22,9 @@ export const listPortalSources=(role,fetchImpl=fetch)=>
   request(`/api/team-models/sources?role=${encodeURIComponent(role)}`,'GET',null,fetchImpl)
     .then(result=>result.sources)
 
+export const deletePortalDraft=(id,role,fetchImpl=fetch)=>
+  request('/api/team-models/delete','POST',{id,role},fetchImpl)
+
 export const savePortalDraft=(draft,fetchImpl=fetch)=>
   request('/api/team-models/save','POST',draft,fetchImpl).then(result=>result.draft)
 
