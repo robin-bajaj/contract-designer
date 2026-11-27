@@ -44,3 +44,7 @@ export const publishPortalDraft=(id,fetchImpl=fetch)=>
 
 export const dbtBackendStatus=(fetchImpl=fetch)=>
   request('/api/dbt/status','GET',null,fetchImpl)
+
+/** Query GitHub Actions preflight; only the Python backend may create the PR. */
+export const prepublishStatus=(id,fetchImpl=fetch)=>
+  request(`/api/team-models/prepublish?id=${encodeURIComponent(id)}`,'GET',null,fetchImpl)
