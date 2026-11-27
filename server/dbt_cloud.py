@@ -7,6 +7,7 @@ unsaved local files. Never describe a remote run as deploying a portal draft.
 from __future__ import annotations
 import json
 import os
+import re
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -94,3 +95,71 @@ def repository(repository_id: int) -> dict:
     if type(repository_id) is not int or repository_id < 1:
         raise DbtCloudError("Invalid dbt repository identifier")
     return request("GET", f"/api/v2/accounts/{account()}/repositories/{repository_id}/")
+
+# Team Lead onboarding uses credentials supplied through the portal on a
+# server-bound HTTPS request. No dbt token appears in a query string or in a
+# response. Allow only known dbt API hosts to avoid server-side request forgery.
+CELL_HOST = re.compile(r"^[a-z0-9-]+\\.(?:us[123]|eu[1234]|au[12]|jp1)\\.dbt\\.com$")
+LEGACY_HOSTS = {"cloud.getdbt.com", "emea.dbt.com", "au.dbt.com"}
+
+
+def validate_host(host: str) -> str:
+    if not isinstance(host, str) or len(host) > 180:
+        raise DbtCloudError("Invalid dbt account API host")
+    value = host.lower().strip()
+    extra = {x.strip().lower() for x in os.environ.get("PORTAL_DBT_ALLOWED_HOSTS", "").split(",") if x.strip()}
+    if value in LEGACY_HOSTS or CELL_HOST.fullmatch(value) or value in extra:
+        if re.fullmatch(r"[a-z0-9][a-z0-9.-]*[a-z0-9]", value):
+            return value
+    raise DbtCloudError("Use your account's dbt API hostname shown in Account settings")
+
+
+def connection_request(credentials: dict, resource: str, *, opener=None) -> dict:
+    """Authenticated read-only request for a Team Lead-supplied dbt account."""
+    host = validate_host(credentials.get("host"))
+    account_id = credentials.get("accountId")
+    token = credentials.get("token")
+    if type(account_id) is not int or account_id <= 0 or not isinstance(token, str) or not token.strip():
+        raise DbtCloudError("Provide an account ID and service token")
+    prefix = f"/api/v2/accounts/{account_id}/"
+    if not resource.startswith(prefix) or any(c in resource for c in ("#", "\\", "\r", "\n")):
+        raise DbtCloudError("dbt endpoint is not authorized for this account")
+    if len(resource) > 300:
+        raise DbtCloudError("Invalid dbt endpoint")
+    req = Request(f"https://{host}{resource}", headers={
+        "Authorization": f"Token {token}", "Accept": "application/json",
+    })
+    try:
+        with (opener or urlopen)(req, timeout=20) as response:
+            data = json.load(response)
+    except HTTPError as exc:
+        if exc.code in (401, 403):
+            raise DbtCloudError("dbt rejected the service token or its permissions") from exc
+        raise DbtCloudError(f"dbt returned HTTP {exc.code}") from exc
+    except (URLError, TimeoutError) as exc:
+        raise DbtCloudError("Cannot connect to the selected dbt account") from exc
+    if not isinstance(data, dict):
+        raise DbtCloudError("Unexpected dbt API response")
+    return data
+
+
+def connected_projects(credentials: dict) -> dict:
+    return connection_request(credentials, f"/api/v2/accounts/{credentials['accountId']}/projects/")
+
+
+def connected_project(credentials: dict, project_id: int) -> dict:
+    if type(project_id) is not int or project_id < 1:
+        raise DbtCloudError("Invalid dbt project ID")
+    return connection_request(credentials, f"/api/v2/accounts/{credentials['accountId']}/projects/{project_id}/")
+
+
+def connected_environments(credentials: dict, project_id: int) -> dict:
+    if type(project_id) is not int or project_id < 1:
+        raise DbtCloudError("Invalid dbt project ID")
+    return connection_request(credentials, f"/api/v2/accounts/{credentials['accountId']}/environments/?project_id={project_id}")
+
+
+def connected_repository(credentials: dict, repository_id: int) -> dict:
+    if type(repository_id) is not int or repository_id < 1:
+        raise DbtCloudError("Invalid dbt repository ID")
+    return connection_request(credentials, f"/api/v2/accounts/{credentials['accountId']}/repositories/{repository_id}/")
