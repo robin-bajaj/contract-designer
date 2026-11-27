@@ -278,7 +278,8 @@ class Handler(BaseHTTPRequestHandler):
                    "/api/team-models/save", "/api/team-models/delete", "/api/team-models/validate",
                    "/api/team-models/publish", "/api/dbt/jobs/run",
                    "/api/lead/dbt/projects",
-                   "/api/lead/dbt/preview", "/api/lead/dbt/connect"}
+                   "/api/lead/dbt/preview", "/api/lead/dbt/connect",
+                   "/api/lead/github/verify"}
         if path not in allowed:
             self.send_error(404)
             return
@@ -306,7 +307,9 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(429, {"ok": False, "error": "Validation busy; retry shortly"})
             return
         try:
-            if path == "/api/lead/dbt/projects":
+            if path == "/api/lead/github/verify":
+                self.send_json(200, {"ok": True, **project_connections.verify_github_connection(payload.get("role"))})
+            elif path == "/api/lead/dbt/projects":
                 result = project_connections.preview_account(
                     payload.get("role"), payload)
                 self.send_json(200, {"ok": True, **result})
@@ -375,6 +378,9 @@ class Handler(BaseHTTPRequestHandler):
                     "projectConnectionAvailable": dbt_cloud.configured(),
                     "remoteRunsEnabled": os.environ.get("DBT_CLOUD_ENABLE_RUNS") == "1",
                 })
+            elif path == "/api/lead/github/status":
+                role = parse_qs(parsed.query).get("role", [""])[0]
+                self.send_json(200, {"ok": True, **project_connections.github_connection_status(role)})
             elif path == "/api/team-models/connected":
                 role = parse_qs(parsed.query).get("role", [""])[0]
                 self.send_json(200, project_connections.inventory(role))
