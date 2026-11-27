@@ -51,5 +51,30 @@ class CloudTests(unittest.TestCase):
             with self.assertRaises(dbt_cloud.DbtCloudError):
                 dbt_cloud.jobs()
 
+
+    def test_team_lead_api_call_is_host_allowlisted_and_never_returns_token(self):
+        cred={"host":"acme.us1.dbt.com","accountId":123,"token":"lead-token-not-for-browser"}
+        calls=[]
+        def opener(request,timeout):
+            calls.append(request)
+            return Response(b'{"data":[{"id":19,"name":"Team A"}]}')
+        result=dbt_cloud.connection_request(
+            cred,"/api/v2/accounts/123/projects/",opener=opener)
+        self.assertEqual(result["data"][0]["id"],19)
+        self.assertEqual(calls[0].get_header("Authorization"),"Token lead-token-not-for-browser")
+        self.assertNotIn("lead-token",calls[0].full_url)
+        self.assertNotIn("lead-token",repr(result))
+        for host in ("localhost","127.0.0.1","evil.com","https://cloud.getdbt.com"):
+            with self.subTest(host=host),self.assertRaises(dbt_cloud.DbtCloudError):
+                dbt_cloud.validate_host(host)
+
+    def test_team_lead_api_refuses_redirects(self):
+        from urllib.error import HTTPError
+        cred={"host":"cloud.getdbt.com","accountId":123,"token":"lead-token"}
+        def redirect(request,timeout):
+            raise HTTPError(request.full_url,302,"redirect",{},None)
+        with self.assertRaisesRegex(dbt_cloud.DbtCloudError,"redirect"):
+            dbt_cloud.connection_request(cred,"/api/v2/accounts/123/projects/",opener=redirect)
+
 if __name__=="__main__":
     unittest.main()

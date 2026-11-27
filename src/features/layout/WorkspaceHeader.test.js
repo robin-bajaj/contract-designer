@@ -13,7 +13,7 @@ const header = read('./WorkspaceHeader.jsx')
 test('one shared workspace header is rendered before all three role workspaces', () => {
   assert.equal(ROLE_OPTIONS.length, 3)
   assert.match(gateway, /<WorkspaceHeader\s+role=\{role\}\s+onLogout=\{signOut\}/)
-  assert.match(gateway, /canAccessDesigner\(role\)\s*\?\s*<ContractDesigner/)
+  assert.match(gateway, /canAccessDesigner\(role\)\s*\?\s*<ContractDesigner\s*\/>/)
   assert.match(gateway, /:\s*<TeamWorkspace/)
   assert.doesNotMatch(designer, /<header\b/)
   assert.doesNotMatch(teams, /<header\b/)

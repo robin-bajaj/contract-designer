@@ -3,8 +3,10 @@ import { AlertCircle, CheckCircle2, Database, GitBranch, Plus, RefreshCw } from 
 import { ROLE_OPTIONS } from './roles.js'
 import { parseTeamSemanticFile } from '../../services/github/teamSemanticRegistry.js'
 import { listPortalModels, listPortalSources, dbtBackendStatus } from '../../services/portal/teamPortalApi.js'
+import { teamConnectedModels, teamConnectedFile } from '../../services/portal/projectConnectionApi.js'
 import { fetchGovernanceContracts } from '../../services/github/githubRegistry.js'
 import TeamModelEditor from './TeamModelEditor.jsx'
+import ProjectConnectionsAdmin from './ProjectConnectionsAdmin.jsx'
 import { describeTeamSemanticModel } from '../../domain/semantics/teamModelView.js'
 import './TeamWorkspace.css'
 
@@ -95,8 +97,15 @@ export default function TeamWorkspace({ role }) {
   const [contracts, setContracts] = useState([])
   const [sourceModels,setSourceModels] = useState([])
   const [creating,setCreating] = useState(false)
+  const [connecting,setConnecting] = useState(false)
   const [editing,setEditing] = useState(null)
   const [dbtStatus,setDbtStatus] = useState(null)
+  const [connectedCatalog,setConnectedCatalog] = useState(null)
+  const [catalogLoading,setCatalogLoading] = useState(true)
+  const [catalogError,setCatalogError] = useState('')
+  const [openedFile,setOpenedFile] = useState(null)
+  const [openedFileError,setOpenedFileError] = useState('')
+  const [openedFileLoading,setOpenedFileLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [selectedId, setSelectedId] = useState(null)
@@ -123,6 +132,26 @@ export default function TeamWorkspace({ role }) {
     return () => { active = false }
   }, [role, generation])
 
+  useEffect(() => {
+    let active=true
+    setConnectedCatalog(null);setCatalogError('');setOpenedFile(null)
+    setCatalogLoading(true)
+    teamConnectedModels(role)
+      .then(catalog=>{if(active)setConnectedCatalog(catalog)})
+      .catch(err=>{if(active)setCatalogError(err.message)})
+      .finally(()=>{if(active)setCatalogLoading(false)})
+    return ()=>{active=false}
+  },[role,generation])
+
+  const openConnectedFile=async path=>{
+    setOpenedFile(null);setOpenedFileError('');setOpenedFileLoading(true)
+    try{
+      const file=await teamConnectedFile(role,path)
+      setOpenedFile(file)
+    }catch(err){setOpenedFileError(err.message)}
+    finally{setOpenedFileLoading(false)}
+  }
+
   const presentations = useMemo(() => models.flatMap(draft => {
     if (!draft.yamlText?.trim()) return []
     try {
@@ -131,6 +160,9 @@ export default function TeamWorkspace({ role }) {
     } catch { return [] }
   }), [models, contracts, role])
   const currentModel = presentations.find(model => model.id === selectedId) || presentations[0]
+
+  if (connecting) return <ProjectConnectionsAdmin role={role}
+    onBack={()=>{setConnecting(false);setGeneration(current=>current+1)}}/>
 
   if (creating) return <div className="team-page"><TeamModelEditor key={editing?.id||'new'} role={role} contracts={contracts}
     sourceModels={sourceModels} initialDraft={editing}
@@ -141,12 +173,47 @@ export default function TeamWorkspace({ role }) {
       <div className="team-dashboard-title">
         <div><span className="team-label">PORTAL-OWNED SEMANTIC MODELS</span><h1>{workspace?.label} Workspace</h1>
           <p>{workspace?.description} · Create staging and semantic models, inherit CDO definitions, validate, and publish—all in one place.</p></div>
-        <div className="team-dashboard-actions"><button type="button" className="primary team-create-button" disabled={loading||Boolean(error)} onClick={()=>{setEditing(null);setCreating(true)}}><Plus size={15}/> Create Semantic Model</button>
+        <div className="team-dashboard-actions"><button type="button" className="outline" disabled={loading} onClick={()=>setConnecting(true)}><GitBranch size={15}/> Team Lead: Connect dbt Project</button>
+        <button type="button" className="primary team-create-button" disabled={loading||Boolean(error)} onClick={()=>{setEditing(null);setCreating(true)}}><Plus size={15}/> Create Semantic Model</button>
         <button type="button" className="outline" disabled={loading} onClick={() => setGeneration(v => v + 1)}>
           <RefreshCw size={15}/>{loading ? 'Loading...' : 'Refresh models'}
         </button></div>
       </div>
       <div className="team-repository-line" role="status"><Database size={17}/><span><strong>{dbtStatus?.workspaceReady ? 'Model workspace ready' : 'Preparing model workspace'}</strong> · {dbtStatus?.validationReady ? 'Validation service available' : 'Validation service unavailable — contact the administrator'} · Approved CDO contracts available</span></div>
+      <section className="team-detail-section team-connected-project" aria-label="Connected dbt Cloud project inventory">
+        <h3><GitBranch size={18}/> Connected dbt project</h3>
+        {catalogLoading && <p role="status">Discovering models from the connected project…</p>}
+        {catalogError && <p className="team-error" role="alert">Unable to discover the connected project: {catalogError}</p>}
+        {!catalogLoading && !catalogError && !connectedCatalog?.connection && <p>No dbt Cloud project connected yet. Ask your CDO administrator to connect an existing project.</p>}
+        {connectedCatalog?.connection && <>
+          <div className="team-connected-summary">
+            <div><span>dbt project</span><strong>{connectedCatalog.connection.projectName}</strong></div>
+            <div><span>Environment</span><strong>{connectedCatalog.connection.environmentName}</strong></div>
+            <div><span>Connected GitHub repository</span><strong>{connectedCatalog.connection.repository}</strong></div>
+            <div><span>Discovered staging models</span><strong>{connectedCatalog.sources.length}</strong></div>
+          </div>
+          <p>Existing definitions are read from the connected repository. Database credentials stay in dbt Cloud. These previews are read-only; validation and remote editing integration will follow.</p>
+          <h4>Staging models</h4>
+          {connectedCatalog.sources.length ? <div className="team-connected-source-list">
+            {(connectedCatalog.sourceFiles||[]).map(file=><button type="button" key={file.path} className="team-connected-source" disabled={openedFileLoading} onClick={()=>openConnectedFile(file.path)} title="View source SQL">{file.name}</button>)}
+          </div> : <p>No staging SQL files found in this team's model folder.</p>}
+          <h4>Semantic models from Git</h4>
+          {connectedCatalog.models.length ? <div className="team-connected-model-list">
+            {connectedCatalog.models.map((model,index)=><div className="team-connected-model-row" key={model.file+'-'+index}>
+              <div><strong>{model.semanticName||model.sourceModel||model.file}</strong>
+                <small>{model.description||'No description'} · {model.sourceModel||'No source model'}{model.contract?.name ? ` · Inherits ${model.contract.name} v${model.contract.version}` : ''}</small></div>
+              <button type="button" className="outline" disabled={openedFileLoading} onClick={()=>openConnectedFile(model.file)}>View source YAML</button>
+            </div>)}
+          </div> : <p>No semantic YAML definitions found in this team's model folder.</p>}
+          {connectedCatalog.limited && <p>Showing the first 60 semantic YAML files. Ask the administrator to narrow the repository for larger projects.</p>}
+          {openedFileLoading && <p role="status">Loading source definition…</p>}
+          {openedFileError && <p className="team-error" role="alert">{openedFileError}</p>}
+          {openedFile && <div className="team-connected-file">
+            <div><strong>{openedFile.path}</strong><button className="outline" onClick={()=>setOpenedFile(null)} type="button">Close preview</button></div>
+            <pre aria-label="Connected dbt model file">{openedFile.content}</pre>
+          </div>}
+        </>}
+      </section>
       {loading && <div className="team-loading" role="status">Loading your models and approved contracts…</div>}
       {error && <div className="team-error" role="alert"><AlertCircle size={18}/>Unable to load your workspace: {error}. <button onClick={() => setGeneration(v => v + 1)}>Retry</button></div>}
       {!loading && !error && !models.length && <div className="team-empty">No portal-authored models yet. Create a staging and semantic model to get started.</div>}

@@ -1,3 +1,80 @@
+# Team Lead Onboarding — Connect Existing dbt Cloud Project
+
+**Team A / Team C Leads connect their existing dbt projects entirely from the
+portal UI.** A lead provides their dbt Cloud API host, account ID and scoped
+service token once, selects an existing project and environment, and saves
+the mapping. Developers do not enter a dbt token, a Neon database password,
+or a GitHub credential to view existing models.
+
+## Local POC setup — Team Leads, not CDO
+
+The platform operator first provisions **separate Team Lead access codes**.
+These codes protect credentials even while the login screen only simulates
+roles. They are not dbt credentials:
+
+```bash
+export PORTAL_TEAM_A_LEAD_KEY="A_LONG_UNIQUE_RANDOM_CODE"
+export PORTAL_TEAM_C_LEAD_KEY="ANOTHER_LONG_UNIQUE_RANDOM_CODE"
+# Optional: only for private repos not readable anonymously; use read-only scope.
+export PORTAL_GITHUB_READ_TOKEN="GITHUB_READ_ONLY_TOKEN"
+npm run dev:api
+```
+
+There is **no need to set** `DBT_CLOUD_ACCOUNT_ID`,
+`DBT_CLOUD_TOKEN`, `DBT_CLOUD_HOST` or `PORTAL_ADMIN_KEY`
+for connecting team projects. The Team Lead supplies the first three through
+the UI, and the backend validates them against the dbt API.
+
+From the Team A or Team C workspace:
+
+1. Select **Team Lead: Connect dbt Project**.
+2. Enter the team-specific access code (issued by the platform operator).
+3. Enter the **dbt Cloud API hostname** from dbt account settings
+   (for example `cloud.getdbt.com` or `<account>.us1.dbt.com`),
+   the numeric **account ID**, and a **scoped service token**.
+4. Select **Discover dbt projects**. The backend checks the account/token
+   and returns project choices without returning credentials.
+5. Choose the existing project, inspect the verified GitHub repository,
+   then select its development environment.
+6. Select **Connect**. The backend encrypts the service token at rest,
+   stores the account/project/environment mapping, and returns **only**
+   non-secret project information. The form clears the token and access code.
+7. Back in Team A/C workspace, the existing source SQL/YAML inventory appears
+   automatically. Source definitions are read-only in this milestone.
+
+## How integration security works
+
+- **Token verification:** dbt API requests are sent server-side over HTTPS
+  to recognized dbt API hosts only. No credential appears in a URL or in
+  browser storage. Private/custom vanity API hosts require the platform
+  operator to allowlist them via `PORTAL_DBT_ALLOWED_HOSTS`.
+- **Authorization:** team-specific, server-verified lead keys gate onboarding.
+  Merely selecting the Team A or Team C demo role does not authorize changes.
+  Leads need a separate code, not the global CDO role.
+- **Encrypted persistence (localhost POC):** the token is encrypted using
+  Fernet before storage in SQLite. Its randomly generated encryption key
+  lives separately in `.portal/integrations.key` (private file mode 0600).
+  Never commit, distribute or delete this key while keeping the database;
+  losing it requires reconnection. This is **not a managed KMS**.
+- **Credential isolation:** Team A/C model discovery returns only safe
+  metadata and committed Git SQL/YAML, not the dbt token/ciphertext or
+  Neon connection details. GitHub read access is still configured by the
+  platform; dbt's Git integration does not authorize the portal directly.
+- **Network boundary:** the Python backend is loopback-only, with no CORS
+  access for external origins. Team discovery remains read-only and lacks
+  real user authentication. Do **not** expose this development app publicly.
+  Before production deployment, replace lead codes with enterprise SSO,
+  implement per-user RBAC, CSRF/session controls, a central secret manager/KMS,
+  audit logs and sandboxed dbt execution.
+
+**This PR is only project connection and discovery.** Existing local
+Save Draft, Validate Model and Publish Model operations still use the
+portal-managed dbt Core workspace. They do not remotely edit dbt Studio or
+create a GitHub PR; a future PR will connect editing and mandatory pre-publish
+database-backed validation against the selected remote environment.
+
+
+---
 # Semantic Governance Portal — managed workspace (current)
 
 **Team A and Team C do not need to create or configure a dbt project.** The platform's

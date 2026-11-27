@@ -4,3 +4,6 @@ dbt-postgres==1.11.0
 PyYAML>=6,<7
 click>=8,<9
 sqlglot>=26,<29
+
+# Encrypt Team Lead-provided dbt service tokens at rest (private 0600 install key).
+cryptography>=42,<47
