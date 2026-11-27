@@ -198,3 +198,11 @@ npm run dev:api
 ```
 
 In another terminal run `npm run dev`. Validation cannot run if the local Python backend is not running; the UI shows an availability warning in that case. SQLGlot is a preliminary parser and dbt parse does not execute SQL against Neon. Neither establishes physical database schema correctness.
+
+## CDO workspace navigation
+
+The CDO explorer panel has a collapse/expand chevron at the top. When collapsed it reduces to a narrow rail, leaving more space for the contract canvas or editor; click the chevron again to restore the search, contract tree, GitHub sync, and import controls.
+
+On the lineage canvas, **double-clicking a contract** displays the same **View Contract** and **Create Child Contract** options as right-clicking it. Right-clicking blank canvas still offers standalone contract creation, while left-drag continues to move nodes/pan. The left contract explorer supports right-click/double-click action menus too. In the explorer, click the desired menu action to open a contract.
+
+**Escape** closes canvas and explorer context menus and cancels an active canvas pointer interaction. On the contract editor, Escape returns to the canvas (unless a text input is focused, in which case the first Escape blurs that field). The common header and Team A/C views are unchanged.

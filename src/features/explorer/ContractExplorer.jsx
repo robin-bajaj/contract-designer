@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { ChevronDown, ChevronRight, Layers, Link2, Plus, X, Eye, GitBranch } from 'lucide-react'
 import { buildContractTree } from '../../domain/contracts/contractTree.js'
 
@@ -7,6 +7,13 @@ export default function ContractExplorer({ contracts, search, activeId, onOpen, 
   const { roots, matchingCount } = buildContractTree(contracts, search)
   const [collapsed, setCollapsed] = useState({})
   const [menuId, setMenuId] = useState(null)
+  useEffect(() => {
+    const closeOnEscape = event => {
+      if (event.key === 'Escape') setMenuId(null)
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [])
   const searching = Boolean(search.trim())
   const renderNode = (node, depth = 0) => {
     const { contract, children } = node
@@ -17,14 +24,17 @@ export default function ContractExplorer({ contracts, search, activeId, onOpen, 
         <button type="button" className="tree-chevron" aria-label={`${expanded ? 'Collapse' : 'Expand'} ${contract.name}`} aria-expanded={expanded} disabled={!hasChildren} onClick={() => setCollapsed(current => ({...current, [contract.id]: !current[contract.id]}))}>
           {hasChildren ? expanded ? <ChevronDown size={15}/> : <ChevronRight size={15}/> : <span className="tree-dot"/>}
         </button>
-        <button type="button" className="nav-link" title={`${contract.name} v${contract.version}`} onClick={() => contract.uses ? (setMenuId(null), onOpen(contract.id)) : setMenuId(current => current === contract.id ? null : contract.id)}>
+        <button type="button" className="nav-link" title={`${contract.name} v${contract.version} · double-click or right-click for options`}
+          onDoubleClick={event => {event.preventDefault();setMenuId(contract.id)}}
+          onContextMenu={event => {event.preventDefault();setMenuId(contract.id)}}
+          onClick={() => setMenuId(current => current === contract.id ? null : contract.id)}>
           {contract.uses ? <Link2 size={15}/> : <Layers size={15}/>}
           <span>{contract.name}</span>
           <small>v{contract.version}</small>
         </button>
         {onRemove && <button type="button" className="icon-quiet danger tree-remove" title={`Delete ${contract.name}`} aria-label={`Delete ${contract.name}`} onClick={() => onRemove(contract.id)}><X size={14}/></button>}
       </div>
-      {menuId === contract.id && !contract.uses && <div className="tree-context-actions" style={{ '--tree-depth': depth }}><button type="button" onClick={() => {setMenuId(null);onOpen(contract.id)}}><Eye size={13}/> View Contract</button><button type="button" onClick={() => {setMenuId(null);onAddChild(contract)}}><GitBranch size={13}/> Create Child</button></div>}
+      {menuId === contract.id && <div className="tree-context-actions" style={{ '--tree-depth': depth }}><button type="button" onClick={() => {setMenuId(null);onOpen(contract.id)}}><Eye size={13}/> View Contract</button><button type="button" onClick={() => {setMenuId(null);onAddChild(contract)}}><GitBranch size={13}/> Create Child</button></div>}
       {hasChildren && expanded && <div className="tree-descendants">{children.map(child => renderNode(child, depth + 1))}</div>}
     </React.Fragment>
   }
