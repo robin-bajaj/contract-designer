@@ -285,9 +285,29 @@ def _github(path: str) -> dict:
         with urlopen(request, timeout=20) as response:
             return json.load(response)
     except HTTPError as exc:
-        if exc.code in (401, 403, 404):
+        # GitHub's unauthenticated rate limit (60 requests/hour) often looks
+        # identical to a permissions error. Keep this diagnosis actionable.
+        remaining = exc.headers.get("X-RateLimit-Remaining", "")
+        if exc.code in (403, 429) and remaining == "0":
             raise team_portal.PortalError(
-                "Cannot read the connected GitHub repository. An administrator must grant repository read access.", 503
+                "GitHub API rate limit reached. Configure a server-only "
+                "PORTAL_GITHUB_READ_TOKEN with repository Contents: read permission "
+                "and restart the backend, or retry after GitHub's rate limit resets.", 429
+            ) from exc
+        if exc.code == 401:
+            raise team_portal.PortalError(
+                "GitHub rejected the configured PORTAL_GITHUB_READ_TOKEN. "
+                "Check its validity and restart the backend.", 503
+            ) from exc
+        if exc.code == 403:
+            raise team_portal.PortalError(
+                "GitHub denied access. Verify repository Contents: read permission "
+                "for PORTAL_GITHUB_READ_TOKEN, or check GitHub API rate limits.", 503
+            ) from exc
+        if exc.code == 404:
+            raise team_portal.PortalError(
+                "GitHub repository or file was not found or is not readable "
+                "with the configured credentials.", 404
             ) from exc
         raise team_portal.PortalError(f"GitHub project inventory unavailable (HTTP {exc.code})", 502) from exc
     except (URLError, TimeoutError) as exc:
