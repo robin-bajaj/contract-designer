@@ -10,7 +10,7 @@ const backend=read('../../../server/fast_validate.py')
 
 test('Team A/C members configure dbt inside workspace without a lead code',()=>{
   assert.match(workspace,/setConnecting\(true\)/)
-  assert.match(workspace,/Team Lead: Connect dbt Project/)
+  assert.match(workspace,/Team Lead: Manage connections/)
   assert.match(workspace,/ProjectConnectionsAdmin role=\{role\}/)
   assert.match(admin,/dbt Cloud account ID/)
   assert.match(admin,/dbt Cloud service token/)
@@ -31,4 +31,15 @@ test('team workspace opens discovered Git files in read-only project explorer',(
   assert.match(workspace,/read-only/)
   assert.match(tree,/onOpen\(file.path\)/)
   assert.match(tree,/FileJson|FileCode2/)
+})
+
+test('GitHub App integration verifies linked repository without PAT in browser',()=>{
+  const api=read('../../services/portal/projectConnectionApi.js')
+  const backend=read('../../../server/project_connections.py')
+  assert.match(admin,/Install \/ authorize GitHub App/)
+  assert.match(admin,/Verify GitHub connection/)
+  assert.match(api,/leadVerifyGithub/)
+  assert.match(backend,/verify_github_connection/)
+  assert.match(backend,/github_installation_id/)
+  assert.doesNotMatch(admin,/GitHub personal access token.*input/)
 })
