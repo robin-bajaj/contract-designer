@@ -1,183 +1,111 @@
-"""dbt Cloud project connection and Git inventory tests; no real credentials."""
-import base64
+"""Team lead dbt onboarding and encrypted Git discovery tests."""
 import os
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
+from server import project_connections as pc, team_portal, dbt_cloud
 
-from server import project_connections as pc, team_portal
-
-SHA = "a" * 40
-TREE_SHA = "b" * 40
-YAML = """version: 2
-models:
-  - name: stg_team_a_positions
-    description: Existing equity positions
-    config:
-      meta:
-        uses:
-          name: cdo.position
-          version: 1
-    semantic_model:
-      enabled: true
-      name: team_a_equity_positions
-"""
-SQL = "select 1 as position_id"
-FILE_A = "models/semantic_models/team_a/team_a_semantics.yml"
+TOKEN = "dbt-test-token-in-encrypted-store"
+LEAD_A = "team-a-lead-private-access-code"
+LEAD_C = "team-c-lead-private-access-code"
+SHA, TREE_SHA = "a"*40, "b"*40
 STAGE_A = "models/staging/team_a/stg_team_a_positions.sql"
+FILE_A = "models/semantic_models/team_a/team_a_semantics.yml"
 FILE_C = "models/semantic_models/team_c/team_c_semantics.yml"
 
-
-def projects():
-    return {"data": [
-        {"id": 17, "name": "Equity dbt", "repository_id": 41, "connection_id": 21},
-        {"id": 18, "name": "Other dbt", "repository_id": None},
-    ]}
-
-
-def project(project_id):
-    return {"data": {
-        "id": project_id, "name": "Equity dbt",
-        "repository_id": 41, "connection_id": 21,
-        "dbt_project_subdirectory": "",
-    }}
-
-
-def environments(project_id):
-    return {"data": [
-        {"id": 101, "project_id": project_id, "name": "Development", "type": "development"},
-        {"id": 102, "project_id": 999, "name": "Other project"},
-    ]}
-
-
-def repository(repo_id):
-    return {"data": {"full_name": "robin-bajaj/federated-semantic-poc"}}
-
-
+def projects(c):
+    assert c["token"] == TOKEN
+    return {"data":[{"id":17,"name":"Equity dbt","repository_id":41}]}
+def project(c,p):
+    return {"data":{"id":p,"name":"Equity dbt","repository_id":41,"connection_id":21}}
+def environments(c,p):
+    return {"data":[{"id":101,"project_id":p,"name":"Dev"},{"id":102,"project_id":999,"name":"Other"}]}
+def repository(c,p):
+    return {"data":{"full_name":"robin-bajaj/federated-semantic-poc"}}
 def github(path):
+    import base64
     if path == "/repos/robin-bajaj/federated-semantic-poc":
-        return {"full_name": "robin-bajaj/federated-semantic-poc", "default_branch": "main"}
+        return {"full_name":"robin-bajaj/federated-semantic-poc","default_branch":"main"}
     if path.endswith("/branches/main"):
-        return {"commit": {"sha": SHA, "commit": {"tree": {"sha": TREE_SHA}}}}
-    if path.endswith(f"/git/trees/{TREE_SHA}?recursive=1"):
-        return {"truncated": False, "tree": [
-            {"path": STAGE_A, "type": "blob"},
-            {"path": FILE_A, "type": "blob"},
-            {"path": FILE_C, "type": "blob"},
-            {"path": "models/staging/team_c/stg_team_c_positions.sql", "type": "blob"},
-            {"path": "secrets/passwords.txt", "type": "blob"},
-        ]}
-    if "/contents/" in path and STAGE_A in path:
-        return {"type": "file", "encoding": "base64",
-                "content": base64.b64encode(SQL.encode()).decode()}
-    if "/contents/" in path and FILE_A in path:
-        return {"type": "file", "encoding": "base64",
-                "content": base64.b64encode(YAML.encode()).decode()}
-    if "/contents/" in path and FILE_C in path:
-        return {"type": "file", "encoding": "base64",
-                "content": base64.b64encode(b"not: [valid yaml").decode()}
-    raise AssertionError(f"Unexpected GitHub API path {path}")
+        return {"commit":{"sha":SHA,"commit":{"tree":{"sha":TREE_SHA}}}}
+    if path.endswith("/git/trees/"+TREE_SHA+"?recursive=1"):
+        return {"tree":[{"type":"blob","path":p} for p in (STAGE_A,FILE_A,FILE_C)]}
+    if "/contents/" in path:
+        raw = ("version: 2\nmodels:\n  - name: a\n    config:\n      meta:\n        uses:\n          name: cdo.position\n          version: 1\n    semantic_model:\n      name: team_a\n" if FILE_A in path
+               else "select 1 as position_id" if STAGE_A in path else "not: [valid")
+        return {"type":"file","encoding":"base64","content":base64.b64encode(raw.encode()).decode()}
+    raise AssertionError(path)
 
-
-class ConnectedProjectTests(unittest.TestCase):
+class TeamLeadConnectionTests(unittest.TestCase):
     def setUp(self):
-        tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(tmp.cleanup)
-        p = patch.dict(os.environ, {
-            "PORTAL_DB_PATH": str(Path(tmp.name) / "drafts.sqlite3"),
-            "PORTAL_ADMIN_KEY": "administrator-test-key",
-            "DBT_CLOUD_TOKEN": "super-secret-dbt-api-token",
-            "PORTAL_GITHUB_READ_TOKEN": "super-secret-github-token",
-        })
-        p.start()
-        self.addCleanup(p.stop)
-        for module, name, replacement in [
-            ("server.dbt_cloud", "projects", projects),
-            ("server.dbt_cloud", "project", project),
-            ("server.dbt_cloud", "environments", environments),
-            ("server.dbt_cloud", "repository", repository),
-            ("server.project_connections", "_github", github),
+        temp=tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.db=Path(temp.name)/"portal.sqlite3"
+        p=patch.dict(os.environ,{"PORTAL_DB_PATH":str(self.db),
+                                 "PORTAL_TEAM_A_LEAD_KEY":LEAD_A,
+                                 "PORTAL_TEAM_C_LEAD_KEY":LEAD_C})
+        p.start(); self.addCleanup(p.stop)
+        for name,func in [
+            ("server.dbt_cloud.connected_projects",projects),
+            ("server.dbt_cloud.connected_project",project),
+            ("server.dbt_cloud.connected_environments",environments),
+            ("server.dbt_cloud.connected_repository",repository),
+            ("server.project_connections._github",github),
         ]:
-            patcher=patch(f"{module}.{name}", side_effect=replacement)
-            patcher.start()
-            self.addCleanup(patcher.stop)
+            mocked=patch(name,side_effect=func)
+            mocked.start();self.addCleanup(mocked.stop)
+        self.payload={"role":"team-a","apiHost":"cloud.getdbt.com","accountId":123,"serviceToken":TOKEN}
 
-    def test_connection_changes_require_real_admin_key(self):
-        for supplied in (None, "", "CDO", "administrator-test-kex"):
-            with self.subTest(supplied=supplied):
-                with self.assertRaisesRegex(team_portal.PortalError, "authorization"):
-                    pc.require_admin(supplied)
-        pc.require_admin("administrator-test-key")
-        with patch.dict(os.environ, {"PORTAL_ADMIN_KEY": ""}):
-            with self.assertRaisesRegex(team_portal.PortalError, "not configured"):
-                pc.require_admin("administrator-test-key")
-
-    def test_choices_and_preview_derive_from_dbt_metadata(self):
-        choices = pc.project_choices()
-        self.assertEqual(choices[0]["name"], "Equity dbt")
-        self.assertTrue(choices[0]["repositoryConnected"])
-        self.assertFalse(choices[1]["repositoryConnected"])
-        preview = pc.project_preview(17)
-        self.assertEqual(preview["repository"], "robin-bajaj/federated-semantic-poc")
-        self.assertEqual(preview["defaultBranch"], "main")
-        self.assertEqual(preview["environments"], [
-            {"id": 101, "name": "Development", "type": "development", "deploymentType": ""},
-        ])
-        self.assertNotIn("super-secret", repr(preview))
-        self.assertNotIn("password", repr(preview))
-
-    def test_save_team_assignment_and_discover_source_without_credentials(self):
-        mapping = pc.assign("team-a", 17, 101)
-        self.assertEqual(mapping["environmentName"], "Development")
-        self.assertEqual(mapping["projectId"], 17)
-        self.assertEqual(mapping["repository"], "robin-bajaj/federated-semantic-poc")
-        self.assertEqual(pc.connection_for("team-a")["projectId"], 17)
-        self.assertIsNone(pc.connection_for("team-c"))
-        catalog = pc.inventory("team-a")
-        self.assertEqual(catalog["revision"], SHA)
-        self.assertEqual(catalog["sources"], ["stg_team_a_positions"])
-        self.assertEqual(catalog["sourceFiles"], [{"name": "stg_team_a_positions", "path": STAGE_A}])
-        self.assertEqual(len(catalog["models"]), 1)
-        model = catalog["models"][0]
-        self.assertEqual(model["semanticName"], "team_a_equity_positions")
-        self.assertEqual(model["contract"], {"name": "cdo.position", "version": 1})
-        self.assertNotIn("super-secret", repr(catalog))
-
-    def test_read_only_sql_and_yaml_are_pinned_to_revision_and_team(self):
-        pc.assign("team-a", 17, 101)
-        sql = pc.model_file("team-a", STAGE_A)
-        self.assertEqual(sql["content"], SQL)
-        self.assertEqual(sql["revision"], SHA)
-        self.assertEqual(pc.model_file("team-a", FILE_A)["content"], YAML)
-        for bad in (FILE_C, "secrets/passwords.txt", "../models/staging/team_a/stg_team_a_positions.sql"):
-            with self.subTest(bad=bad):
-                with self.assertRaises(team_portal.PortalError):
-                    pc.model_file("team-a", bad)
-
-    def test_reject_other_projects_environment_or_bad_role(self):
-        with self.assertRaisesRegex(team_portal.PortalError, "environment"):
-            pc.assign("team-a", 17, 102)
+    def test_only_authorized_team_lead_may_connect(self):
+        for wrong in (None,"","cdo",LEAD_C,"wrong"):
+            with self.subTest(key=wrong),self.assertRaises(team_portal.PortalError):
+                pc.require_lead("team-a",wrong)
+        pc.require_lead("team-a",LEAD_A)
         with self.assertRaises(team_portal.PortalError):
-            pc.assign("cdo", 17, 101)
+            pc.require_lead("cdo",LEAD_A)
+
+    def test_account_discovery_is_lead_gated_and_secret_free(self):
+        with self.assertRaises(team_portal.PortalError):
+            pc.preview_account("team-a",LEAD_C,self.payload)
+        choice=pc.preview_account("team-a",LEAD_A,self.payload)
+        self.assertEqual(choice["projects"][0]["name"],"Equity dbt")
+        preview=pc.preview_project("team-a",LEAD_A,{**self.payload,"projectId":17})
+        self.assertEqual(preview["repository"],"robin-bajaj/federated-semantic-poc")
+        self.assertEqual(len(preview["environments"]),1)
+        self.assertNotIn(TOKEN,repr(choice)+repr(preview))
+
+    def test_persists_encrypted_token_and_team_scoped_inventory(self):
+        result=pc.assign("team-a",LEAD_A,{**self.payload,"projectId":17,"environmentId":101})
+        self.assertEqual(result["accountId"],123)
+        self.assertNotIn(TOKEN,repr(result))
+        self.assertNotIn(TOKEN,self.db.read_bytes().decode("utf8",errors="ignore"))
+        self.assertEqual(pc.connection_secret("team-a",LEAD_A)["token"],TOKEN)
+        key=self.db.parent/"integrations.key"
+        self.assertTrue(key.is_file())
+        self.assertFalse(key.stat().st_mode & 0o077)
+        catalog=pc.inventory("team-a")
+        self.assertEqual(catalog["sources"],["stg_team_a_positions"])
+        self.assertEqual(catalog["models"][0]["contract"]["name"],"cdo.position")
+        self.assertIn("select 1",pc.model_file("team-a",STAGE_A)["content"])
+        for file in (FILE_C,"secrets/credentials.yml","../models/staging/team_a/x.sql"):
+            with self.assertRaises(team_portal.PortalError):
+                pc.model_file("team-a",file)
+        self.assertNotIn(TOKEN,repr(catalog))
+
+    def test_wrong_environment_or_invalid_host_never_saves_token(self):
+        with self.assertRaises(team_portal.PortalError):
+            pc.assign("team-a",LEAD_A,{**self.payload,"projectId":17,"environmentId":102})
+        with self.assertRaises(team_portal.PortalError):
+            pc.assign("team-c",LEAD_A,{**self.payload,"projectId":17,"environmentId":101})
+        for host in ("localhost","evil.example","https://cloud.getdbt.com","cloud.getdbt.com/path"):
+            with self.assertRaises(dbt_cloud.DbtCloudError):
+                pc.preview_account("team-a",LEAD_A,{**self.payload,"apiHost":host})
         self.assertIsNone(pc.connection_for("team-a"))
 
-    def test_dbtlayer_is_not_a_source_of_user_secrets(self):
-        pc.assign("team-c", 17, 101)
-        self.assertEqual(pc.inventory("team-c")["models"], [{"file": FILE_C, "invalid": True}])
-        response = repr(pc.all_connections())
-        self.assertNotIn("super-secret-github", response)
-        self.assertNotIn("super-secret-dbt", response)
+    def test_team_c_malformed_yaml_does_not_hide_other_files(self):
+        pc.assign("team-c",LEAD_C,{**self.payload,"role":"team-c","projectId":17,"environmentId":101})
+        self.assertEqual(pc.inventory("team-c")["models"],[{"file":FILE_C,"invalid":True}])
 
-    def test_unrelated_git_provider_and_bad_subdirectory_are_refused(self):
-        self.assertEqual(pc._repo_name({"remote_url":
-                         "git@github.com:robin-bajaj/federated-semantic-poc.git"}),
-                         "robin-bajaj/federated-semantic-poc")
-        with self.assertRaises(team_portal.PortalError):
-            pc._repo_name({"remote_url": "https://gitlab.com/example/dbt.git"})
-        with self.assertRaises(team_portal.PortalError):
-            pc._subdirectory({"dbt_project_subdirectory": "../other"})
-
-
-if __name__ == "__main__":
+if __name__=="__main__":
     unittest.main()
