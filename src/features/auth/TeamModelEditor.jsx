@@ -92,7 +92,7 @@ export default function TeamModelEditor({role,contracts,sourceModels,onBack,init
     try{
       const output=await publishPortalDraft(saved.id)
       setResult(output)
-      setSaved({...saved,status:'published'})
+      setSaved({...saved,status:'submitted',prUrl:output.prUrl,prNumber:output.prNumber})
     }catch(err){setError(err.message)}
     finally{setPublishing(false)}
   }
@@ -203,7 +203,7 @@ export default function TeamModelEditor({role,contracts,sourceModels,onBack,init
         <h3>6. Save, validate and publish</h3>
         {issues.length?<div className="team-validation-errors"><strong>Resolve these before publishing:</strong><ul>{issues.map((issue,i)=><li key={i}>{issue}</li>)}</ul></div>
           : <p className="team-validation-ok"><CheckCircle2 size={16}/> Initial form checks passed. Run validation before publishing.</p>}
-        <p className="team-editor-note">Your drafts are saved automatically in the portal's private storage when you click Save Draft. Validate before publishing; no project setup is required.</p>
+        <p className="team-editor-note">Save your draft locally, validate with the CDO compiler and dbt Core, then create a GitHub pull request. Connect GitHub with Contents and Pull requests write permissions in Team Lead: Manage connections first.</p>
         <div className="team-editor-buttons">
           <button type="button" className="outline" disabled={saving||validating} onClick={saveDraft}><Save size={15}/>{saving?'Saving…':'Save Draft'}</button>
           <button type="button" className="outline" disabled={!generated||validating} onClick={validateStaging}>
@@ -211,7 +211,7 @@ export default function TeamModelEditor({role,contracts,sourceModels,onBack,init
           </button>
           <button type="button" className="outline" disabled={!generated} onClick={()=>downloadYaml(`${draft.semanticName}.yml`,generated)}><Download size={15}/> Download YAML</button>
           <button type="button" className="primary" disabled={publishing||!saved?.id||validatedSignature!==snapshot} onClick={publish}>
-            <Rocket size={15}/>{publishing?'Publishing…':'Publish Model'}
+            <Rocket size={15}/>{publishing?'Creating pull request…':'Create GitHub PR'}
           </button>
         </div>
         {validationResult && <div className={`team-dbt-results ${validationResult.ok?'passed':'failed'}`} role="status">
@@ -226,10 +226,13 @@ export default function TeamModelEditor({role,contracts,sourceModels,onBack,init
           {validationResult.log && <details><summary>dbt / compiler output</summary><pre>{validationResult.log}</pre></details>}
           <small>Validation checks model structure and references; it does not execute SQL or verify physical column types.</small>
         </div>}
-        {saved?.id && <p className="team-validation-ok"><Save size={14}/> Draft saved to portal · {saved.status}</p>}
+        {saved?.id && <p className="team-validation-ok"><Save size={14}/> Draft saved to portal · {saved.status}{saved.prUrl && <> · <a href={saved.prUrl} target="_blank" rel="noopener noreferrer">GitHub PR #{saved.prNumber}</a></>}</p>}
         {error && <p className="team-editor-error" role="alert">{error}</p>}
-        {result && <p className="team-editor-success"><CheckCircle2 size={15}/> {result.message} · {result.paths?.join(', ')}</p>}
-        <p className="team-editor-note">Published models stay in the portal workspace. Deployment to an external environment is not connected yet.</p>
+        {result && <div className="team-editor-success"><CheckCircle2 size={15}/>
+          <span>{result.message} <a href={result.prUrl} target="_blank" rel="noopener noreferrer">View PR #{result.prNumber} on GitHub</a>
+          <small>{result.paths?.join(', ')}</small></span>
+        </div>}
+        <p className="team-editor-note">Publishing creates a feature branch and pull request in the connected GitHub repository. Nothing is merged into main until GitHub reviews and required CI checks pass.</p>
       </section>
       </div>
       <aside className="team-yaml-preview" aria-label="Live dbt YAML preview">
