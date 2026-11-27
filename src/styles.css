@@ -144,3 +144,38 @@
 /* Viewport-level connector overlay uses measured pixel rectangles for exact card attachment. */
 .canvas-connections-overlay{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1;overflow:visible}
 .canvas-world{z-index:2}
+
+/* Live CDO YAML alongside the editable form on wide content areas.
+   Container width (not screen width) respects the expandable left explorer. */
+.main-content{container-type:inline-size}
+.editor-split-layout{min-width:0}
+.editor-split-layout .editor-panel{min-width:0;max-width:none}
+.yaml-side-panel{min-width:0;scroll-margin-top:20px}
+.yaml-side-panel .yaml-head{align-items:flex-start}
+.yaml-side-panel .yaml-file-label{min-width:0}
+.yaml-side-panel .yaml-file-label small{overflow-wrap:anywhere}
+.yaml-side-panel pre{white-space:pre;overflow:auto;overflow-wrap:normal}
+@container (min-width: 1040px){
+  .editor-split-layout.has-yaml{
+    display:grid;
+    grid-template-columns:minmax(0,1.5fr) minmax(360px,0.95fr);
+    gap:20px;
+    align-items:start;
+  }
+  .editor-split-layout.has-yaml>.yaml-side-panel{
+    position:sticky;
+    top:18px;
+    margin:0;
+    height:min(78dvh,850px);
+    min-height:410px;
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
+  }
+  .editor-split-layout.has-yaml>.yaml-side-panel .yaml-head{flex-shrink:0}
+  .editor-split-layout.has-yaml>.yaml-side-panel pre{
+    flex:1;
+    min-height:0;
+    max-height:none;
+  }
+}

@@ -30,9 +30,10 @@ export default function ContractEditor({
   const metrics = active.metrics || []
 
   return <>
-          <div className="editor-actions"><button className="outline" onClick={onBack}><ArrowLeft size={16}/> Back to Contracts</button><div className="head-actions"><button className="outline" onClick={() => {setShowYaml(true); window.requestAnimationFrame(() => yamlRef.current?.scrollIntoView({behavior:'smooth',block:'start'}))}}><Code2 size={16}/>View YAML</button><button className="primary" onClick={() => { const errors = validateContract(active, contracts);setValidation(errors);setNotice(errors.length ? 'Please resolve validation issues before exporting.' : 'Local structural checks passed. CI remains the authoritative contract validator.') }}><CheckCircle2 size={16}/> Validate</button><button className="primary" onClick={() => { if(currentIssues.length) {setValidation(currentIssues);setNotice('Resolve validation issues before exporting.');return} download(contractFilename(active), selectedYaml); setNotice('YAML exported. Submit it through a GitHub PR for authoritative validation.')}}><Download size={16}/> Export YAML</button></div></div>
+          <div className="editor-actions"><button className="outline" onClick={onBack}><ArrowLeft size={16}/> Back to Contracts</button><div className="head-actions"><button className="outline" onClick={() => {setShowYaml(true); window.requestAnimationFrame(() => { const preview = yamlRef.current; if (preview && window.getComputedStyle(preview.parentElement).display !== 'grid') preview.scrollIntoView({behavior:'smooth',block:'start'}) })}}><Code2 size={16}/>View YAML</button><button className="primary" onClick={() => { const errors = validateContract(active, contracts);setValidation(errors);setNotice(errors.length ? 'Please resolve validation issues before exporting.' : 'Local structural checks passed. CI remains the authoritative contract validator.') }}><CheckCircle2 size={16}/> Validate</button><button className="primary" onClick={() => { if(currentIssues.length) {setValidation(currentIssues);setNotice('Resolve validation issues before exporting.');return} download(contractFilename(active), selectedYaml); setNotice('YAML exported. Submit it through a GitHub PR for authoritative validation.')}}><Download size={16}/> Export YAML</button></div></div>
           <PublishPanel contract={active} token={githubToken} onTokenChange={setGithubToken} onPublish={publish}
             isPublishing={publishing} pullRequest={publishedPR}/>
+          <div className={`editor-split-layout ${showYaml ? 'has-yaml' : ''}`}>
           <div className="editor-panel">
             <div className="editor-intro"><span className="eyebrow">{active.uses ? 'CHILD CONTRACT' : 'STANDALONE CONTRACT'}</span><p>{active.uses ? 'Select definitions to inherit from a versioned parent contract' : 'Define reusable enterprise business attributes and governed metrics'}</p></div>
             <h3 className="section-title">Contract Details</h3>
@@ -67,11 +68,12 @@ export default function ContractEditor({
               <button className="primary add-button" onClick={()=>update(c=>({...c,metrics:[...c.metrics,{name:'new_metric',type:'simple',agg:'sum',expr:c.attributes[0]?.name||'',description:''}]}))}><Plus size={17}/> Add Metric</button>
             </>}
             {validation && <div className={`validation ${validation.length?'invalid':'valid'}`}>{validation.length ? <><strong>{validation.length} validation issue(s)</strong>{validation.map((msg,i)=><div key={i}>• {msg}</div>)}</> : <><CheckCircle2 size={17}/> Local structural checks passed. Run the CDO Python registry validator after exporting.</>}</div>}
-            {showYaml && <div className="yaml-preview" ref={yamlRef}>
+          </div>
+          {showYaml && <aside className="yaml-preview yaml-side-panel" ref={yamlRef} aria-label="Live YAML preview">
               <div className="yaml-head"><div className="yaml-file-label"><Code2 size={18}/><div><strong>Live YAML preview</strong><small>{contractFilename(active)} · v{active.version} · contract definition</small></div></div>
                 <div className="yaml-buttons"><button type="button" className="outline" onClick={() => navigator.clipboard?.writeText(selectedYaml)}>Copy YAML</button><button type="button" className="outline" onClick={() => { if(currentIssues.length) {setValidation(currentIssues);setNotice('Resolve validation issues before exporting.');return} download(contractFilename(active), selectedYaml); setNotice('YAML downloaded. Submit it through a GitHub PR for authoritative validation.') }}><Download size={15}/> Download .yml</button><button type="button" className="icon-quiet" aria-label="Hide YAML preview" title="Hide YAML preview" onClick={() => setShowYaml(false)}><X size={16}/></button></div>
               </div><pre aria-label="Generated YAML content"><code>{selectedYaml}</code></pre>
-            </div>}
+          </aside>}
           </div>
   </>
 }

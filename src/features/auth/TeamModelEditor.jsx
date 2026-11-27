@@ -79,7 +79,8 @@ export default function TeamModelEditor({role,contracts,sourceModels,onBack}) {
       <div><span className="team-label">NEW SEMANTIC IMPLEMENTATION</span><h2>Create a team semantic model</h2><p>Author SQL and model properties without editing CDO-owned definitions. Proposed changes go through a pull request.</p></div>
     </div>
 
-    <div className="team-editor-form">
+    <div className="team-editor-form team-editor-split-layout">
+      <div className="team-editor-fields">
       <section>
         <h3>1. dbt source model</h3>
         <label>Starting point
@@ -206,7 +207,17 @@ export default function TeamModelEditor({role,contracts,sourceModels,onBack}) {
         {result && <p className="team-editor-success"><CheckCircle2 size={15}/> PR #{result.number} created. <a href={result.url} target="_blank" rel="noopener noreferrer">Open for review</a></p>}
         <p className="team-editor-note">The PR targets federated-semantic-poc/main. It does not run dbt Cloud immediately or deploy your model. CI validates the compiled project.</p>
       </section>
-      <section className="team-yaml-preview"><h3>Generated dbt YAML preview</h3><pre>{generated||'# Complete valid model details to preview generated YAML.'}</pre></section>
+      </div>
+      <aside className="team-yaml-preview" aria-label="Live dbt YAML preview">
+        <div className="team-yaml-preview-header">
+          <div><h3>Live YAML preview</h3><p>{draft.semanticName ? `${draft.semanticName}.yml` : 'New dbt semantic model'}</p></div>
+          <div className="team-yaml-preview-actions">
+            <button type="button" className="outline" disabled={!generated} onClick={() => navigator.clipboard?.writeText(generated)}>Copy</button>
+            <button type="button" className="outline" disabled={!generated} onClick={() => downloadYaml(`${draft.semanticName}.yml`,generated)}><Download size={14}/> Download</button>
+          </div>
+        </div>
+        <pre aria-label="Generated dbt YAML content">{generated||'# Complete valid model details to preview generated YAML.\n# The preview updates as the draft becomes valid.'}</pre>
+      </aside>
     </div>
   </div>
 }
