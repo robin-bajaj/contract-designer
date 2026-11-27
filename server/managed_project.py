@@ -31,6 +31,27 @@ groups:
     owner:
       name: Team C
 """
+# dbt Semantic Layer needs a DAY-granularity time spine, even for parse-only
+# validation of some semantic models. We provide a PostgreSQL-compatible one.
+TIME_SPINE_SQL = """{{ config(materialized='view') }}
+select date_day::date as date_day
+from generate_series(
+    (current_date - interval '5 years')::timestamp,
+    (current_date + interval '30 days')::timestamp,
+    interval '1 day'
+) as generated_dates(date_day)
+"""
+TIME_SPINE_YAML = """version: 2
+models:
+  - name: time_spine_daily
+    description: Portal-managed daily time spine for semantic metrics
+    time_spine:
+      standard_granularity_column: date_day
+    columns:
+      - name: date_day
+        data_type: date
+        granularity: day
+"""
 TEAM_DIRS = (
     "models/staging/team_a",
     "models/staging/team_c",
@@ -68,10 +89,15 @@ def ensure_project(portal_home: Path) -> Path:
             raise ManagedProjectError("The managed model workspace directory is invalid")
         project.mkdir(exist_ok=True)
         config = project / "dbt_project.yml"
-        groups = project / "models" / "groups.yml"
-        groups.parent.mkdir(exist_ok=True)
+        models_dir = project / "models"
+        if models_dir.is_symlink() or (models_dir.exists() and not models_dir.is_dir()):
+            raise ManagedProjectError("The managed models directory is invalid")
+        models_dir.mkdir(exist_ok=True)
+        groups = models_dir / "groups.yml"
         _create_if_missing(config, PROJECT_FILE)
         _create_if_missing(groups, GROUPS_FILE)
+        _create_if_missing(models_dir / "time_spine_daily.sql", TIME_SPINE_SQL)
+        _create_if_missing(models_dir / "time_spine.yml", TIME_SPINE_YAML)
         for folder in TEAM_DIRS:
             location = project / folder
             if location.is_symlink() or (location.exists() and not location.is_dir()):
