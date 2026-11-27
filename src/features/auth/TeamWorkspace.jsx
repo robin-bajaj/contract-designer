@@ -198,7 +198,7 @@ export default function TeamWorkspace({ role }) {
       <div className="team-dashboard-title">
         <div><span className="team-label">CONNECTED DBT PROJECT</span><h1>{workspace?.label} Workspace</h1>
           <p>{workspace?.description} · Create staging and semantic models, inherit CDO definitions, validate, and publish—all in one place.</p></div>
-        <div className="team-dashboard-actions"><button type="button" className="outline" disabled={loading} onClick={()=>setConnecting(true)}><GitBranch size={15}/> Team Lead: Connect dbt Project</button>
+        <div className="team-dashboard-actions"><button type="button" className="outline" disabled={loading} onClick={()=>setConnecting(true)}><GitBranch size={15}/> Team Lead: Manage connections</button>
         <button type="button" className="primary team-create-button" disabled={loading||Boolean(error)} onClick={()=>{setEditing(null);setCreating(true)}}><Plus size={15}/> Create Semantic Model</button>
         <button type="button" className="outline" disabled={loading} onClick={() => setGeneration(v => v + 1)}>
           <RefreshCw size={15}/>{loading ? 'Loading...' : 'Refresh models'}
