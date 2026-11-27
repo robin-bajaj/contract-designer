@@ -218,3 +218,14 @@ The CDO lineage canvas connects each child card directly to the bottom-center of
 The canvas now opens at **100% zoom**, centered on the diagram. The **Fit all contracts** toolbar control still automatically computes a suitable scale when clicked. **Reset positions** restores the automatic node layout and centers it at 100%.
 
 Usage instructions appear **once**, in the canvas toolbar. Zoom Out, Zoom In, Fit All, Reset and the current zoom percentage have descriptive native hover tooltips. This change does not modify governance contracts, YAML, or team workspaces.
+
+## Immediate canvas control hints and safe zoom reset
+
+The CDO canvas toolbar shows descriptive tooltips **immediately on hover or keyboard focus**, without requiring a click or waiting for browser-native title popups. Hover/focus itself never pans, zooms, or moves contract cards.
+
+The toolbar now makes two distinct actions explicit:
+
+- **Reset zoom to 100%** (`RotateCcw`): changes only the zoom transform, preserving every saved card position.
+- **Restore automatic card positions** (`LayoutGrid`): intentionally clears custom node coordinates and returns the graph to its original auto-layout (at 100% zoom).
+
+**Fit all contracts** intentionally recenters and rescales the viewport when clicked. If you only want to read what a control does, hover it; no click is necessary.
