@@ -72,11 +72,11 @@ export default function ProjectConnectionsAdmin({role,onBack}) {
         <div><strong>{saved.projectName} · {saved.environmentName}</strong>
           <small>{saved.repository} · {saved.branch}</small></div>
       </div>
-      <p>Project discovery is ready. The service token was encrypted on the server and cleared from this form.</p>
+      <p>Project discovery is ready. The dbt API token was encrypted on the server and cleared from this form.</p>
       <button type="button" className="primary" onClick={onBack}>View {team} models</button>
     </section> : <section className="project-connect-panel">
       <h2><ShieldCheck size={20}/> {team} dbt Cloud connection</h2>
-      <p>Connect your account once. Your database credentials remain in dbt Cloud. Use a scoped service token with permission to read your dbt projects, environments and Git configuration.</p>
+      <p>Connect your account once. Your database credentials remain in dbt Cloud. Use an API token authorized to read dbt projects, environments and Git configuration. On Starter, use a Personal Access Token (PAT); Starter service tokens may be limited to Semantic Layer permissions.</p>
       <form onSubmit={discover}>
         <div className="project-connect-fields">
           <label>dbt Cloud API host
@@ -85,8 +85,8 @@ export default function ProjectConnectionsAdmin({role,onBack}) {
           <label>dbt Cloud account ID
             <input type="number" min="1" step="1" value={accountId} onChange={e=>{setAccountId(e.target.value);resetSelection()}} placeholder="Account ID" required/>
           </label>
-          <label>dbt Cloud service token
-            <input type="password" autoComplete="off" value={serviceToken} onChange={e=>{setServiceToken(e.target.value);resetSelection()}} placeholder="Paste scoped service token" required/>
+          <label>dbt Cloud API token (PAT or service token)
+            <input type="password" autoComplete="off" value={serviceToken} onChange={e=>{setServiceToken(e.target.value);resetSelection()}} placeholder="Paste a dbt API token" required/>
           </label>
         </div>
         <button className="primary" type="submit" disabled={loading||!accountId||!serviceToken||!apiHost}>
@@ -118,7 +118,7 @@ export default function ProjectConnectionsAdmin({role,onBack}) {
         <Link2 size={15}/>{loading?'Saving connection…':`Connect to ${team}`}
       </button>}
       {error && <p className="project-connect-error" role="alert">{error}</p>}
-      <small>Local development only: this screen has no sign-in or Team Lead authentication. Do not expose the portal publicly. Production requires company SSO and team permissions. Service tokens are encrypted server-side, and never saved to browser storage.</small>
+      <small>Local development only: this screen has no sign-in or Team Lead authentication. Do not expose the portal publicly. Production requires company SSO and team permissions. API tokens are encrypted server-side, and never saved to browser storage.</small>
     </section>}
     <p className="project-connect-footnote">This first milestone provides read-only discovery of existing SQL, YAML and CDO references. Remote editing, live database execution and PR publication are not yet connected. No warehouse password is requested.</p>
   </main>
