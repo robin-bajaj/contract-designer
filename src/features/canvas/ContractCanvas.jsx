@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Maximize2, Minus, Plus, RotateCcw, Move, Eye, GitBranch } from 'lucide-react'
+import { Maximize2, Minus, Plus, RotateCcw, LayoutGrid, Move, Eye, GitBranch } from 'lucide-react'
 import { canvasContextAction, positionCanvasMenu } from './canvasActions.js'
 import { createLineageLayout, lineageEdges, NODE_WIDTH, NODE_HEIGHT } from './lineage.js'
 
@@ -147,7 +147,19 @@ export default function ContractCanvas({ contracts, onOpen, onCreateStandalone, 
     window.addEventListener('keydown', close)
     return () => window.removeEventListener('keydown', close)
   }, [])
-  const reset = () => {
+  // Reset zoom only; do not discard the user's saved card coordinates or pan.
+  const resetZoom = () => setView(previous => {
+    const box = viewport.current
+    const centerX = (box?.clientWidth || 800) / 2
+    const centerY = (box?.clientHeight || 550) / 2
+    const ratio = 1 / previous.scale
+    return {
+      x: centerX - (centerX - previous.x) * ratio,
+      y: centerY - (centerY - previous.y) * ratio,
+      scale: 1,
+    }
+  })
+  const restoreLayout = () => {
     setOverrides({})
     try { localStorage.removeItem(STORAGE_KEY) } catch { /* optional */ }
     // Reset to the auto-layout at actual 100%, not the prior saved zoom.
@@ -178,11 +190,12 @@ export default function ContractCanvas({ contracts, onOpen, onCreateStandalone, 
   return <div className="lineage-wrapper">
     <div className="canvas-toolbar" role="toolbar" aria-label="Canvas controls">
       <span className="canvas-hint"><Move size={15}/> Drag to move or pan · Right-click / double-click for options · Esc to close</span>
-      <button title="Zoom out (decrease canvas scale)" aria-label="Zoom out" onClick={() => zoomAt(1 / 1.2, (viewport.current?.clientWidth || 800) / 2, (viewport.current?.clientHeight || 550) / 2)}><Minus size={17}/></button>
-      <span className="zoom-level" title="Current canvas zoom level">{Math.round(view.scale * 100)}%</span>
-      <button title="Zoom in (increase canvas scale)" aria-label="Zoom in" onClick={() => zoomAt(1.2, (viewport.current?.clientWidth || 800) / 2, (viewport.current?.clientHeight || 550) / 2)}><Plus size={17}/></button>
-      <button title="Fit all contracts into view" aria-label="Fit all contracts" onClick={fit}><Maximize2 size={16}/></button>
-      <button title="Reset card positions and zoom to 100%" aria-label="Reset positions" onClick={reset}><RotateCcw size={16}/></button>
+      <button type="button" data-tooltip="Zoom out · reduce scale" aria-label="Zoom out" onClick={() => zoomAt(1 / 1.2, (viewport.current?.clientWidth || 800) / 2, (viewport.current?.clientHeight || 550) / 2)}><Minus size={17}/></button>
+      <span className="zoom-level" data-tooltip="Current zoom level" tabIndex={0} aria-label={`Canvas zoom ${Math.round(view.scale * 100)} percent`}>{Math.round(view.scale * 100)}%</span>
+      <button type="button" data-tooltip="Zoom in · increase scale" aria-label="Zoom in" onClick={() => zoomAt(1.2, (viewport.current?.clientWidth || 800) / 2, (viewport.current?.clientHeight || 550) / 2)}><Plus size={17}/></button>
+      <button type="button" data-tooltip="Fit all contracts · centers and scales the view" aria-label="Fit all contracts" onClick={fit}><Maximize2 size={16}/></button>
+      <button type="button" data-tooltip="Reset zoom to 100% · keep card layout" aria-label="Reset zoom to 100%" onClick={resetZoom}><RotateCcw size={16}/></button>
+      <button type="button" data-tooltip="Restore automatic card positions · changes layout" aria-label="Restore automatic card positions" onClick={restoreLayout}><LayoutGrid size={16}/></button>
     </div>
     <div className="canvas-viewport" ref={viewport} onPointerDown={e => start(e, 'pan')} onPointerMove={move} onPointerUp={end} onPointerCancel={end} onContextMenu={e => openContext(e, 'pan')} aria-label="Interactive contract lineage canvas" tabIndex={0} onKeyDown={e => openKeyboardContext(e, 'pan')}>
       <div className="canvas-world" style={{ width: bounds.width, height: bounds.height, transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }}>

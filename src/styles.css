@@ -107,3 +107,36 @@
   .canvas-main-content>.graph-area{min-height:360px}
   .canvas-main-content>.graph-area>.lineage-wrapper{min-height:360px}
 }
+
+/* Instant, click-free hover/focus hints; no browser-native title delay.
+   Show above canvas viewport so tips cannot be clipped by its overflow. */
+.canvas-toolbar{position:relative;z-index:20;overflow:visible}
+.canvas-toolbar button[data-tooltip],.canvas-toolbar .zoom-level[data-tooltip]{position:relative}
+.canvas-toolbar [data-tooltip]::after{
+  content:attr(data-tooltip);
+  position:absolute;
+  top:calc(100% + 8px);
+  right:0;
+  width:max-content;
+  max-width:min(310px,80vw);
+  padding:7px 10px;
+  border-radius:5px;
+  background:#24382d;
+  color:#fff;
+  font-size:11px;
+  font-weight:500;
+  line-height:1.4;
+  white-space:normal;
+  box-shadow:0 4px 14px #17281e35;
+  pointer-events:none;
+  opacity:0;
+  visibility:hidden;
+  z-index:50;
+}
+.canvas-toolbar [data-tooltip]:hover::after,
+.canvas-toolbar [data-tooltip]:focus-visible::after{
+  opacity:1;
+  visibility:visible;
+}
+.canvas-toolbar .zoom-level[data-tooltip]{display:inline-flex;align-items:center;justify-content:center;min-height:30px}
+.canvas-toolbar .zoom-level[data-tooltip]:focus-visible{outline:2px solid #259768;outline-offset:2px;border-radius:3px}

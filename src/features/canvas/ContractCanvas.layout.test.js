@@ -20,12 +20,28 @@ test('one concise instruction appears in the canvas toolbar, not outside or at t
   assert.doesNotMatch(app,/Left-drag the canvas to pan or move contracts/)
 })
 
-test('canvas controls describe their functions on hover',()=>{
+test('toolbar uses immediate custom hover labels and no delayed native title tooltips',()=>{
   for(const hint of [
-    'Zoom out (decrease canvas scale)',
-    'Zoom in (increase canvas scale)',
-    'Fit all contracts into view',
-    'Reset card positions and zoom to 100%',
-    'Current canvas zoom level',
-  ]) assert.ok(canvas.includes(`title="${hint}"`),`Expected tooltip: ${hint}`)
+    'Zoom out · reduce scale',
+    'Zoom in · increase scale',
+    'Fit all contracts · centers and scales the view',
+    'Reset zoom to 100% · keep card layout',
+    'Restore automatic card positions · changes layout',
+    'Current zoom level',
+  ]) assert.ok(canvas.includes(`data-tooltip="${hint}"`), `Missing tooltip: ${hint}`)
+  assert.doesNotMatch(canvas,/title="Reset card positions and zoom to 100%"/)
+  const css=read('../../styles.css')
+  assert.match(css,/\.canvas-toolbar \[data-tooltip\]:hover::after/)
+  assert.match(css,/\.canvas-toolbar \[data-tooltip\]:focus-visible::after/)
+  assert.match(css,/pointer-events:none/)
+})
+
+test('zoom reset does not restore card positions',()=>{
+  assert.match(canvas,/const resetZoom = \(\) => setView\(/)
+  const start=canvas.indexOf('const resetZoom =')
+  const end=canvas.indexOf('const restoreLayout =',start)
+  const zoomImplementation=canvas.slice(start,end)
+  assert.doesNotMatch(zoomImplementation,/setOverrides|removeItem/)
+  assert.match(canvas,/onClick=\{resetZoom\}/)
+  assert.match(canvas,/onClick=\{restoreLayout\}/)
 })
