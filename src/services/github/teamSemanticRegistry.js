@@ -1,16 +1,11 @@
 import yaml from 'js-yaml'
-import { ROLES } from '../../features/auth/roles.js'
-
 export const FEDERATED_REPO = 'robin-bajaj/federated-semantic-poc'
-const TEAM_FOLDERS = Object.freeze({
-  [ROLES.TEAM_A]: 'team_a',
-  [ROLES.TEAM_C]: 'team_c',
-})
 
 export function teamFolder(role) {
-  const folder = TEAM_FOLDERS[role]
-  if (!folder) throw Error('Unknown team role')
-  return folder
+  if (typeof role !== 'string' || !/^team-[a-z][a-z0-9-]{0,48}$/.test(role)) {
+    throw Error('Invalid team role')
+  }
+  return role.replaceAll('-', '_')
 }
 
 export function parseTeamSemanticFile(source, path, role) {
