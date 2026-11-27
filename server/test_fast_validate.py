@@ -76,9 +76,9 @@ class FastValidationTests(unittest.TestCase):
             self.assertEqual(role, "team-risk")
             (project / "models/semantic_models/team_a").mkdir(parents=True)
             (project / "models/semantic_models/team_a/existing.yml").write_text(
-                "version: 2\\nmodels: []\\n"
+                "version: 2\nmodels: []\n"
             )
-            (project / "dbt_project.yml").write_text("name: linked\\nprofile: linked\\n")
+            (project / "dbt_project.yml").write_text("name: linked\nprofile: linked\n")
             return {**connection, "revision": "a" * 40}
         def runner(name, argv, cwd, env=None, timeout=65):
             if name == "dbt Core parse":
