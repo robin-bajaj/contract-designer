@@ -1,9 +1,11 @@
-"""Administrator-controlled dbt project connections and read-only Git inventory.
+"""Team Lead-owned dbt project connections and read-only Git model inventory.
 
-Team A/C developers never supply dbt, warehouse or GitHub credentials.
-The dbt API and GitHub credentials live in Python's environment. A separate
-administrator key gates all connection configuration endpoints; selecting a
-CDO role in the demo frontend is NOT an authorization mechanism.
+The Team Lead supplies dbt account details in the browser, once. A distinct
+server-issued lead access key gates each team (the demo role chooser grants no
+authority). We encrypt the dbt API token in SQLite with an installation-local
+Fernet key, kept separately in a private 0600 file for this localhost POC.
+For multi-user production, replace access keys with SSO and local key files
+with a centralized secret store / KMS.
 """
 from __future__ import annotations
 
@@ -13,31 +15,38 @@ import json
 import os
 from pathlib import Path
 import re
+import threading
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote, urlencode
+from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 import yaml
+from cryptography.fernet import Fernet, InvalidToken
 from . import dbt_cloud, team_portal
 
 TEAM_PREFIX = {"team-a": "team_a", "team-c": "team_c"}
+LEAD_KEYS = {"team-a": "PORTAL_TEAM_A_LEAD_KEY", "team-c": "PORTAL_TEAM_C_LEAD_KEY"}
 GITHUB_REPO = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 SEGMENT = re.compile(r"^[A-Za-z0-9_.-]+$")
 MAX_INVENTORY_FILES = 60
 MAX_FILE_BYTES = 100_000
+KEY_FILE_NAME = "integrations.key"
+_key_lock = threading.Lock()
 
 
-def require_admin(header: str | None) -> None:
-    expected = os.environ.get("PORTAL_ADMIN_KEY", "")
-    if not expected:
-        raise team_portal.PortalError("Administrator access is not configured on this backend", 503)
-    if not isinstance(header, str) or not hmac.compare_digest(header, expected):
-        raise team_portal.PortalError("Administrator authorization required", 403)
+def require_lead(role: str, supplied: str | None) -> None:
+    if role not in LEAD_KEYS:
+        raise team_portal.PortalError("Only Team A/C leads can connect a project", 403)
+    expected = os.environ.get(LEAD_KEYS[role], "")
+    if len(expected) < 16:
+        raise team_portal.PortalError("Team Lead access is not configured by the platform operator", 503)
+    if not isinstance(supplied, str) or not hmac.compare_digest(expected, supplied):
+        raise team_portal.PortalError("Team Lead authorization required", 403)
 
 
 def connect():
-    connection = team_portal.connect()
-    connection.execute("""CREATE TABLE IF NOT EXISTS project_connections (
+    conn = team_portal.connect()
+    conn.execute("""CREATE TABLE IF NOT EXISTS project_connections (
         role TEXT PRIMARY KEY,
         project_id INTEGER NOT NULL,
         project_name TEXT NOT NULL,
@@ -46,9 +55,55 @@ def connect():
         repository TEXT NOT NULL,
         branch TEXT NOT NULL,
         subdirectory TEXT NOT NULL,
-        updated_at TEXT NOT NULL
+        updated_at TEXT NOT NULL,
+        account_id INTEGER,
+        api_host TEXT,
+        token_ciphertext TEXT
     )""")
-    return connection
+    # Forward-only migration for anyone who tried the original PR #32 branch.
+    columns = {r[1] for r in conn.execute("PRAGMA table_info(project_connections)")}
+    for col, kind in (("account_id", "INTEGER"), ("api_host", "TEXT"), ("token_ciphertext", "TEXT")):
+        if col not in columns:
+            conn.execute(f"ALTER TABLE project_connections ADD COLUMN {col} {kind}")
+    return conn
+
+
+def _fernet() -> Fernet:
+    home = team_portal.database_path().parent
+    home.mkdir(parents=True, exist_ok=True)
+    path = home / KEY_FILE_NAME
+    with _key_lock:
+        if path.is_symlink():
+            raise team_portal.PortalError("Integration encryption key is not safe", 503)
+        if not path.exists():
+            try:
+                fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            except FileExistsError:
+                pass
+            else:
+                try:
+                    with os.fdopen(fd, "wb") as file:
+                        file.write(Fernet.generate_key())
+                except Exception:
+                    path.unlink(missing_ok=True)
+                    raise
+        if not path.is_file() or path.stat().st_mode & 0o077:
+            raise team_portal.PortalError("Integration key file must be private (permissions 0600)", 503)
+        try:
+            return Fernet(path.read_bytes())
+        except Exception as exc:
+            raise team_portal.PortalError("Integration encryption key is invalid", 503) from exc
+
+
+def _encrypt(token: str) -> str:
+    return _fernet().encrypt(token.encode("utf-8")).decode("ascii")
+
+
+def _decrypt(ciphertext: str) -> str:
+    try:
+        return _fernet().decrypt(ciphertext.encode("ascii")).decode("utf-8")
+    except (InvalidToken, ValueError) as exc:
+        raise team_portal.PortalError("Stored dbt connection secret is unavailable; reconnect the project", 503) from exc
 
 
 def _clean(row) -> dict | None:
@@ -61,7 +116,9 @@ def _clean(row) -> dict | None:
         "environmentName": row["environment_name"],
         "repository": row["repository"], "branch": row["branch"],
         "subdirectory": row["subdirectory"],
+        "accountId": row["account_id"], "apiHost": row["api_host"],
         "updatedAt": row["updated_at"],
+        # Never expose ciphertext, token, warehouse connection attributes.
     }
 
 
@@ -73,39 +130,45 @@ def connection_for(role: str) -> dict | None:
     return _clean(row)
 
 
-def all_connections() -> list[dict]:
-    with connect() as db:
-        rows = db.execute("SELECT * FROM project_connections ORDER BY role").fetchall()
-    return [_clean(row) for row in rows]
-
-
 def _items(response: dict, label: str) -> list[dict]:
     entries = response.get("data") if isinstance(response, dict) else None
     if not isinstance(entries, list):
         raise dbt_cloud.DbtCloudError(f"Unexpected dbt {label} response")
-    return [item for item in entries if isinstance(item, dict)]
+    return [x for x in entries if isinstance(x, dict)]
 
 
-def project_choices() -> list[dict]:
-    # Only safe metadata reaches the browser; no connection details or secrets.
-    return [
+def _credentials(payload: dict) -> dict:
+    host = dbt_cloud.validate_host(payload.get("apiHost"))
+    value = payload.get("accountId")
+    if type(value) is not int or value < 1:
+        raise team_portal.PortalError("Provide a valid dbt account ID", 400)
+    token = payload.get("serviceToken")
+    if not isinstance(token, str) or not token.strip() or len(token) > 4096:
+        raise team_portal.PortalError("Enter a valid service token", 400)
+    return {"host": host, "accountId": value, "token": token}
+
+
+def preview_account(role: str, lead_key: str | None, payload: dict) -> dict:
+    require_lead(role, lead_key)
+    cred = _credentials(payload)
+    result = [
         {"id": p["id"], "name": p.get("name") or f"Project {p['id']}",
-         "repositoryConnected": bool(p.get("repository_id") or p.get("repository")),
-         "description": p.get("description") or ""}
-        for p in _items(dbt_cloud.projects(), "projects")
+         "repositoryConnected": bool(p.get("repository_id") or p.get("repository"))}
+        for p in _items(dbt_cloud.connected_projects(cred), "projects")
         if type(p.get("id")) is int
     ]
+    return {"projects": result, "connection": connection_for(role)}
 
 
-def _project_details(project_id: int) -> tuple[dict, list[dict]]:
-    response = dbt_cloud.project(project_id)
+def _project_details(cred: dict, project_id: int) -> tuple[dict, list[dict]]:
+    response = dbt_cloud.connected_project(cred, project_id)
     project = response.get("data") if isinstance(response, dict) else None
     if not isinstance(project, dict) or project.get("id") != project_id:
         raise team_portal.PortalError("dbt project could not be verified", 502)
     environments = [
         {"id": env["id"], "name": env.get("name") or f"Environment {env['id']}",
          "type": str(env.get("type") or ""), "deploymentType": str(env.get("deployment_type") or "")}
-        for env in _items(dbt_cloud.environments(project_id), "environments")
+        for env in _items(dbt_cloud.connected_environments(cred, project_id), "environments")
         if type(env.get("id")) is int and env.get("project_id") == project_id
     ]
     return project, environments
@@ -127,7 +190,7 @@ def _repo_name(metadata: dict) -> str:
     raise team_portal.PortalError("This dbt project does not have a supported GitHub repository connected", 422)
 
 
-def _connected_repo(project: dict) -> str:
+def _connected_repo(project: dict, cred: dict) -> str:
     info = project.get("repository")
     if isinstance(info, dict):
         try:
@@ -137,7 +200,7 @@ def _connected_repo(project: dict) -> str:
     repository_id = project.get("repository_id")
     if type(repository_id) is not int or repository_id <= 0:
         raise team_portal.PortalError("Connect a GitHub repository to the dbt project first", 422)
-    data = dbt_cloud.repository(repository_id).get("data")
+    data = dbt_cloud.connected_repository(cred, repository_id).get("data")
     if not isinstance(data, dict):
         raise team_portal.PortalError("Could not read the dbt project's Git repository", 502)
     return _repo_name(data)
@@ -150,6 +213,66 @@ def _subdirectory(project: dict) -> str:
     if any(not SEGMENT.fullmatch(item) or item in (".", "..") for item in raw.split("/")):
         raise team_portal.PortalError("Unsupported dbt project subdirectory", 422)
     return raw + "/"
+
+def preview_project(role: str, lead_key: str | None, payload: dict) -> dict:
+    require_lead(role, lead_key)
+    cred = _credentials(payload)
+    project_id = payload.get("projectId")
+    if type(project_id) is not int or project_id < 1:
+        raise team_portal.PortalError("Choose a valid dbt project", 400)
+    project, environments = _project_details(cred, project_id)
+    repository = _connected_repo(project, cred)
+    read = _repo_read(repository)
+    return {
+        "id": project_id, "name": project.get("name") or f"Project {project_id}",
+        "repository": read["name"], "defaultBranch": read["branch"],
+        "subdirectory": _subdirectory(project),
+        "environments": environments,
+        "connectionConfigured": bool(project.get("connection_id") or project.get("connection")),
+    }
+
+
+def assign(role: str, lead_key: str | None, payload: dict) -> dict:
+    require_lead(role, lead_key)
+    cred = _credentials(payload)
+    environment_id = payload.get("environmentId")
+    if type(environment_id) is not int or environment_id < 1:
+        raise team_portal.PortalError("Choose an environment from the selected project", 400)
+    preview = preview_project(role, lead_key, payload)
+    selected = next((e for e in preview["environments"] if e["id"] == environment_id), None)
+    if selected is None:
+        raise team_portal.PortalError("Selected environment does not belong to the dbt project", 422)
+    encrypted = _encrypt(cred["token"])
+    with connect() as db:
+        db.execute("""INSERT INTO project_connections
+          (role,project_id,project_name,environment_id,environment_name,repository,branch,subdirectory,
+           updated_at,account_id,api_host,token_ciphertext)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+          ON CONFLICT(role) DO UPDATE SET
+          project_id=excluded.project_id,project_name=excluded.project_name,
+          environment_id=excluded.environment_id,environment_name=excluded.environment_name,
+          repository=excluded.repository,branch=excluded.branch,
+          subdirectory=excluded.subdirectory,updated_at=excluded.updated_at,
+          account_id=excluded.account_id,api_host=excluded.api_host,
+          token_ciphertext=excluded.token_ciphertext""", (
+            role, preview["id"], preview["name"], environment_id, selected["name"],
+            preview["repository"], preview["defaultBranch"], preview["subdirectory"],
+            team_portal.now(), cred["accountId"], cred["host"], encrypted,
+        ))
+    return connection_for(role)
+
+
+def connection_secret(role: str, lead_key: str | None) -> dict:
+    """Server-only retrieval, never returned through an HTTP handler."""
+    require_lead(role, lead_key)
+    with connect() as db:
+        row = db.execute("SELECT * FROM project_connections WHERE role=?", (role,)).fetchone()
+    if row is None or not row["token_ciphertext"]:
+        raise team_portal.PortalError("Reconnect the dbt Cloud project", 404)
+    return {
+        "host": row["api_host"], "accountId": row["account_id"],
+        "token": _decrypt(row["token_ciphertext"]),
+    }
 
 
 def _github(path: str) -> dict:
