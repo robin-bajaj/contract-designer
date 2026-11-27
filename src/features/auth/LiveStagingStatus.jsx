@@ -42,11 +42,11 @@ export default function LiveStagingStatus({role,sourceModel,sourceSql}) {
   const statuses={
     idle:{text:!sourceSql?.trim()?'Start typing staging SQL to validate automatically':'Enter a valid SQL model name to validate',Icon:Clock3},
     pending:{text:'Checking after you stop typing…',Icon:Clock3},
-    checking:{text:'Validating with dbt Core…',Icon:LoaderCircle},
-    passed:{text:'✓ Staging validation passed (dbt parse)',Icon:CheckCircle2},
+    checking:{text:'Checking your staging model…',Icon:LoaderCircle},
+    passed:{text:'✓ Staging checks passed',Icon:CheckCircle2},
     failed:{text:'✕ Staging validation failed',Icon:XCircle},
     busy:{text:'Validation service busy — edit SQL to retry',Icon:AlertCircle},
-    unavailable:{text:'Unable to check dbt Core',Icon:AlertCircle},
+    unavailable:{text:'Validation service unavailable',Icon:AlertCircle},
   }
   const {text:label,Icon}=statuses[state]
   return <div className={`live-staging-status live-staging-${state}`} aria-live="polite" aria-atomic="true">
@@ -54,11 +54,11 @@ export default function LiveStagingStatus({role,sourceModel,sourceSql}) {
       <Icon size={18} className={state==='checking'?'live-staging-spinning':''} aria-hidden="true"/>
       <strong>{label}</strong>
     </div>
-    {state==='passed' && <p>dbt project references and configuration parsed successfully. SQL execution and column types have <strong>not</strong> been verified.</p>}
+    {state==='passed' && <p>Your model structure passed preliminary checks. SQL execution and column types have <strong>not</strong> been verified.</p>}
     {(state==='failed'||state==='unavailable'||state==='busy') && <>
       {current?.message && <p>{current.message}</p>}
       {current?.log && <details><summary>Show validation error details</summary><pre>{current.log}</pre></details>}
     </>}
-    {state==='checking' && <p>Checking your latest draft; no GitHub commit or database build.</p>}
+    {state==='checking' && <p>Checking the latest edits; nothing is published.</p>}
   </div>
 }
