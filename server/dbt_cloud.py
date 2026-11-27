@@ -71,3 +71,26 @@ def trigger_configured_job() -> dict:
         raise DbtCloudError("Set DBT_CLOUD_JOB_ID to an existing authorized dbt job")
     return request("POST", f"/api/v2/accounts/{account()}/jobs/{job}/run/",
                    {"cause": "Triggered manually from Semantic Governance Portal (existing remote project revision)"})
+
+# Read-only dbt Administrative API calls for the project connection wizard.
+# The dbt account (and all secrets) are configured by a platform operator.
+def projects() -> dict:
+    return request("GET", f"/api/v2/accounts/{account()}/projects/")
+
+
+def project(project_id: int) -> dict:
+    if type(project_id) is not int or project_id < 1:
+        raise DbtCloudError("Invalid dbt project identifier")
+    return request("GET", f"/api/v2/accounts/{account()}/projects/{project_id}/")
+
+
+def environments(project_id: int) -> dict:
+    if type(project_id) is not int or project_id < 1:
+        raise DbtCloudError("Invalid dbt project identifier")
+    return request("GET", f"/api/v2/accounts/{account()}/environments/?project_id={project_id}")
+
+
+def repository(repository_id: int) -> dict:
+    if type(repository_id) is not int or repository_id < 1:
+        raise DbtCloudError("Invalid dbt repository identifier")
+    return request("GET", f"/api/v2/accounts/{account()}/repositories/{repository_id}/")
