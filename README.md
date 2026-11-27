@@ -258,3 +258,13 @@ The **CDO Contract Editor** and **Team A / Team C Semantic Model Editor** use th
 - On narrower viewports, the preview stacks **below** the form, with its own scrollable code area instead of compressing form fields beyond usability.
 
 The two editors are the only source-authoring views in the current portal with YAML previews; contract canvas, team model browser, GitHub publishing and other workflows are unchanged.
+
+## Compact contract and semantic model authoring
+
+The CDO editor and Team A/C semantic-model editor now use a denser, developer-friendly layout: smaller but readable headings, reduced padding and gaps, compact attribute/metric table rows, and less vertical space for the sticky YAML preview. The right YAML panel remains independently scrollable and continues updating as form fields change.
+
+**CDO standalone descriptions** are now serialized into the YAML document after `name` and `version`, and are therefore reflected in the live preview, exported YAML and proposed GitHub PR. Whitespace-only descriptions are omitted. Attribute and metric descriptions remain unaffected.
+
+**CDO child descriptions:** The governance registry currently enforces a strict `name/version/uses/include` child schema that does not allow a top-level `description`. The editor notes this limitation rather than generating child YAML that would fail the registry validator. Extending the child-contract schema should be a separate coordinated change in the governance repository.
+
+This is a UI-density and serialization fix; no changes to underlying CDO inheritance rules, dbt validation or team model publishing.
