@@ -25,6 +25,7 @@ export default function LiveStagingStatus({role,sourceModel,sourceSql}) {
           signature,
           status:response.busy?'busy':response.ok?'passed':'failed',
           message:response.error||'',
+          hint:response.hint||'',
           log:response.log||'',
           steps:response.steps||[],
         })
@@ -57,6 +58,7 @@ export default function LiveStagingStatus({role,sourceModel,sourceSql}) {
     {state==='passed' && <p>Your model structure passed preliminary checks. SQL execution and column types have <strong>not</strong> been verified.</p>}
     {(state==='failed'||state==='unavailable'||state==='busy') && <>
       {current?.message && <p>{current.message}</p>}
+      {current?.hint && <p className="live-staging-remedy">{current.hint}</p>}
       {current?.log && <details><summary>Show validation error details</summary><pre>{current.log}</pre></details>}
     </>}
     {state==='checking' && <p>Checking the latest edits; nothing is published.</p>}
