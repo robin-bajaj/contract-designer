@@ -120,7 +120,9 @@ def _repo_name(metadata: dict) -> str:
             continue
         normalized = value.strip().removesuffix(".git").rstrip("/")
         normalized = re.sub(r"^(?:https?://|ssh://git@|git@)github\.com[:/]", "", normalized)
-        if GITHUB_REPO.fullmatch(normalized):
+        if GITHUB_REPO.fullmatch(normalized) and all(
+            component not in (".", "..") for component in normalized.split("/")
+        ):
             return normalized
     raise team_portal.PortalError("This dbt project does not have a supported GitHub repository connected", 422)
 
@@ -174,7 +176,9 @@ def _github(path: str) -> dict:
 
 
 def _repo_read(repo: str) -> dict:
-    if not GITHUB_REPO.fullmatch(repo):
+    if not GITHUB_REPO.fullmatch(repo) or any(
+        component in (".", "..") for component in repo.split("/")
+    ):
         raise team_portal.PortalError("Invalid linked GitHub repository", 422)
     details = _github(f"/repos/{repo}")
     if details.get("full_name", "").lower() != repo.lower():
@@ -237,7 +241,10 @@ def _safe_path(row: dict, candidate: str) -> bool:
     prefix = row["subdirectory"] + "models/"
     team = TEAM_PREFIX[row["role"]]
     return (
-        candidate.startswith(prefix + "staging/" + team + "/")
+        isinstance(candidate, str)
+        and not any(segment in (".", "..", "") for segment in candidate.split("/"))
+        and "\\\\" not in candidate
+        and candidate.startswith(prefix + "staging/" + team + "/")
         or candidate.startswith(prefix + "semantic_models/" + team + "/")
     ) and (candidate.endswith(".sql") or candidate.endswith(".yml") or candidate.endswith(".yaml"))
 
