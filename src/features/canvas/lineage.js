@@ -102,7 +102,7 @@ export function boundArrowBetween(parentRect, childRect) {
   const forward = (end.x - start.x) * (bx - ax) + (end.y - start.y) * (by - ay)
   if (forward <= 1) return null
 
-  return { from: start, to: end, fromSide: from.side, toSide: to.side,
+  return { start, end, fromSide: from.side, toSide: to.side,
     path: `M ${start.x} ${start.y} L ${end.x} ${end.y}` }
 }
 
