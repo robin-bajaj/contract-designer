@@ -42,3 +42,23 @@
 .team-dashboard>.team-demo-note{font-size:11px;color:#8b9a91;margin:25px 0 0}
 @media(max-width:800px){.team-meta-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.team-dashboard{padding:25px 15px}.team-model-details{padding:16px}}
 @media(max-width:460px){.team-meta-grid{grid-template-columns:1fr}.team-model-picker select{min-width:100%}}
+
+/* Local-only Team A/C drafts: standalone cards, no federated repository links. */
+.team-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px}
+.team-empty h2{margin:3px 0;font-size:17px;color:#244b32}
+.team-empty p{max-width:510px;font-size:12px;line-height:1.6;margin:0 0 10px}
+.team-empty button{display:inline-flex;align-items:center;gap:7px}
+.team-local-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:14px}
+.team-local-card{background:#fff;border:1px solid #dce9e1;border-radius:10px;padding:18px;min-width:0}
+.team-local-card-head{display:flex;gap:12px;align-items:flex-start;color:#197b4d}
+.team-local-card-head>div{min-width:0}
+.team-local-card-head strong{color:#264b35;font-size:15px;overflow-wrap:anywhere}
+.team-local-card-head p{font-size:12px;color:#748a79;overflow-wrap:anywhere;margin:7px 0}
+.team-local-card-footer{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-top:12px;padding-top:12px;border-top:1px solid #e5eee7}
+.team-local-card-footer>span{display:inline-flex;gap:5px;align-items:center;font-size:11px;font-weight:650}
+.team-local-incomplete{color:#9e6839}
+.team-local-ready{color:#187f4c}
+.team-local-card-actions{display:flex;gap:8px;align-items:center}
+.team-local-card-actions button.outline{font-size:12px;padding:7px 10px}
+.team-local-card-actions .team-delete{display:inline-flex;align-items:center;justify-content:center;border:1px solid #f1d0d0;border-radius:5px;background:#fff4f4;color:#af4242;padding:7px}
+.team-local-card-actions .team-delete:hover{background:#fce0e0}
