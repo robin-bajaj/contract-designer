@@ -7,8 +7,6 @@ from unittest.mock import patch
 from server import project_connections as pc, team_portal, dbt_cloud
 
 TOKEN = "dbt-test-token-in-encrypted-store"
-LEAD_A = "team-a-lead-private-access-code"
-LEAD_C = "team-c-lead-private-access-code"
 SHA, TREE_SHA = "a"*40, "b"*40
 STAGE_A = "models/staging/team_a/stg_team_a_positions.sql"
 FILE_A = "models/semantic_models/team_a/team_a_semantics.yml"
@@ -42,9 +40,7 @@ class TeamLeadConnectionTests(unittest.TestCase):
         temp=tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         self.db=Path(temp.name)/"portal.sqlite3"
-        p=patch.dict(os.environ,{"PORTAL_DB_PATH":str(self.db),
-                                 "PORTAL_TEAM_A_LEAD_KEY":LEAD_A,
-                                 "PORTAL_TEAM_C_LEAD_KEY":LEAD_C})
+        p=patch.dict(os.environ,{"PORTAL_DB_PATH":str(self.db)})
         p.start(); self.addCleanup(p.stop)
         for name,func in [
             ("server.dbt_cloud.connected_projects",projects),
@@ -57,30 +53,29 @@ class TeamLeadConnectionTests(unittest.TestCase):
             mocked.start();self.addCleanup(mocked.stop)
         self.payload={"role":"team-a","apiHost":"cloud.getdbt.com","accountId":123,"serviceToken":TOKEN}
 
-    def test_only_authorized_team_lead_may_connect(self):
-        for wrong in (None,"","cdo",LEAD_C,"wrong"):
-            with self.subTest(key=wrong),self.assertRaises(team_portal.PortalError):
-                pc.require_lead("team-a",wrong)
-        pc.require_lead("team-a",LEAD_A)
-        with self.assertRaises(team_portal.PortalError):
-            pc.require_lead("cdo",LEAD_A)
+    def test_only_known_team_roles_may_connect(self):
+        for invalid in ("cdo", "unknown", "", None):
+            with self.subTest(role=invalid), self.assertRaises(team_portal.PortalError):
+                pc.require_team(invalid)
+        pc.require_team("team-a")
+        pc.require_team("team-c")
 
     def test_account_discovery_is_lead_gated_and_secret_free(self):
         with self.assertRaises(team_portal.PortalError):
-            pc.preview_account("team-a",LEAD_C,self.payload)
-        choice=pc.preview_account("team-a",LEAD_A,self.payload)
+            pc.preview_account("cdo",self.payload)
+        choice=pc.preview_account("team-a",self.payload)
         self.assertEqual(choice["projects"][0]["name"],"Equity dbt")
-        preview=pc.preview_project("team-a",LEAD_A,{**self.payload,"projectId":17})
+        preview=pc.preview_project("team-a",{**self.payload,"projectId":17})
         self.assertEqual(preview["repository"],"robin-bajaj/federated-semantic-poc")
         self.assertEqual(len(preview["environments"]),1)
         self.assertNotIn(TOKEN,repr(choice)+repr(preview))
 
     def test_persists_encrypted_token_and_team_scoped_inventory(self):
-        result=pc.assign("team-a",LEAD_A,{**self.payload,"projectId":17,"environmentId":101})
+        result=pc.assign("team-a",{**self.payload,"projectId":17,"environmentId":101})
         self.assertEqual(result["accountId"],123)
         self.assertNotIn(TOKEN,repr(result))
         self.assertNotIn(TOKEN,self.db.read_bytes().decode("utf8",errors="ignore"))
-        self.assertEqual(pc.connection_secret("team-a",LEAD_A)["token"],TOKEN)
+        self.assertEqual(pc.connection_secret("team-a")["token"],TOKEN)
         key=self.db.parent/"integrations.key"
         self.assertTrue(key.is_file())
         self.assertFalse(key.stat().st_mode & 0o077)
@@ -95,16 +90,16 @@ class TeamLeadConnectionTests(unittest.TestCase):
 
     def test_wrong_environment_or_invalid_host_never_saves_token(self):
         with self.assertRaises(team_portal.PortalError):
-            pc.assign("team-a",LEAD_A,{**self.payload,"projectId":17,"environmentId":102})
+            pc.assign("team-a",{**self.payload,"projectId":17,"environmentId":102})
         with self.assertRaises(team_portal.PortalError):
-            pc.assign("team-c",LEAD_A,{**self.payload,"projectId":17,"environmentId":101})
+            pc.assign("team-c",{**self.payload,"projectId":17,"environmentId":101})
         for host in ("localhost","evil.example","https://cloud.getdbt.com","cloud.getdbt.com/path"):
             with self.assertRaises(dbt_cloud.DbtCloudError):
-                pc.preview_account("team-a",LEAD_A,{**self.payload,"apiHost":host})
+                pc.preview_account("team-a",{**self.payload,"apiHost":host})
         self.assertIsNone(pc.connection_for("team-a"))
 
     def test_team_c_malformed_yaml_does_not_hide_other_files(self):
-        pc.assign("team-c",LEAD_C,{**self.payload,"role":"team-c","projectId":17,"environmentId":101})
+        pc.assign("team-c",{**self.payload,"role":"team-c","projectId":17,"environmentId":101})
         self.assertEqual(pc.inventory("team-c")["models"],[{"file":FILE_C,"invalid":True}])
 
 if __name__=="__main__":
