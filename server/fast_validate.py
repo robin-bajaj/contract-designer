@@ -279,7 +279,7 @@ class Handler(BaseHTTPRequestHandler):
                    "/api/team-models/publish", "/api/dbt/jobs/run",
                    "/api/lead/dbt/projects",
                    "/api/lead/dbt/preview", "/api/lead/dbt/connect",
-                   "/api/lead/github/verify"}
+                   "/api/lead/github/connect", "/api/lead/github/disconnect"}
         if path not in allowed:
             self.send_error(404)
             return
@@ -307,8 +307,10 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(429, {"ok": False, "error": "Validation busy; retry shortly"})
             return
         try:
-            if path == "/api/lead/github/verify":
-                self.send_json(200, {"ok": True, **project_connections.verify_github_connection(payload.get("role"))})
+            if path == "/api/lead/github/connect":
+                self.send_json(200, {"ok": True, **project_connections.connect_github_token(payload.get("role"), payload.get("token"))})
+            elif path == "/api/lead/github/disconnect":
+                self.send_json(200, {"ok": True, **project_connections.disconnect_github_token(payload.get("role"))})
             elif path == "/api/lead/dbt/projects":
                 result = project_connections.preview_account(
                     payload.get("role"), payload)
