@@ -15,7 +15,7 @@ import tempfile
 import yaml
 
 from . import project_snapshot, project_connections, team_ids, team_portal
-from .fast_validate import run_command, StepFailure
+from .validation_runtime import run_command, StepFailure
 
 GOVERNANCE_URL = "https://github.com/robin-bajaj/cdo-semantic-governance.git"
 MAX_LOG = 12000
