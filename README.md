@@ -210,3 +210,11 @@ On the lineage canvas, **double-clicking a contract** displays the same **View C
 ## Full-height CDO canvas
 
 The CDO contract canvas now expands vertically to use the available browser viewport below the shared header, instead of stopping at a fixed 620px height. The canvas toolbar stays attached to the top of the canvas, and pan/zoom, double-click menus, and sidebar collapse remain supported. For smaller viewports, minimum heights preserve usable canvas space; the page scrolls only when needed. The contract editor and Team A/C screens retain their existing layouts.
+
+## Canvas arrows, zoom, and help text
+
+The CDO lineage canvas connects each child card directly to the bottom-center of the **exact parent contract version** referenced by its `uses` declaration. Each curved connector uses the saved/current card positions instead of a shared horizontal bus, avoiding misleading arrows when roots and children are repositioned.
+
+The canvas now opens at **100% zoom**, centered on the diagram. The **Fit all contracts** toolbar control still automatically computes a suitable scale when clicked. **Reset positions** restores the automatic node layout and centers it at 100%.
+
+Usage instructions appear **once**, in the canvas toolbar. Zoom Out, Zoom In, Fit All, Reset and the current zoom percentage have descriptive native hover tooltips. This change does not modify governance contracts, YAML, or team workspaces.
