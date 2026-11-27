@@ -23,5 +23,6 @@ test('shared header has a role indicator and a working sign out callback', () =>
   assert.match(header, /roleOptions\.find\(/)
   assert.match(header, /currentRole\?\.label/)
   assert.match(header, /onClick=\{onLogout\}/)
-  assert.match(header, /SEMANTIC GOVERNANCE/)\n  assert.match(gateway, /fetch\(\x27\/api\/teams\x27\)/)
+  assert.match(header, /SEMANTIC GOVERNANCE/)
+  assert.match(gateway, /fetch\(\x27\/api\/teams\x27\)/)
 })
