@@ -313,10 +313,21 @@ def _safe_path(row: dict, candidate: str) -> bool:
         segment in (".", "..", "") for segment in candidate.split("/")
     ) or chr(92) in candidate:
         return False
-    # Read-only project-wide model discovery; writes remain outside this API.
-    # Never expose arbitrary repository secrets or files outside dbt's models tree.
-    prefix = row["subdirectory"] + "models/"
-    return candidate.startswith(prefix) and candidate.endswith((".sql", ".yml", ".yaml"))
+    # Repository browsing is read-only. Only expose source files from the
+    # selected dbt project directory, not hidden or sensitive configuration.
+    root = row["subdirectory"]
+    if root and not candidate.startswith(root):
+        return False
+    relative = candidate[len(root):]
+    parts = relative.split("/")
+    if any(part.startswith(".") for part in parts):
+        return False
+    if any(part.lower() in {"secrets", "credentials", "private", "target", "dbt_packages", "logs"} for part in parts[:-1]):
+        return False
+    filename = parts[-1].lower()
+    if filename in {"profiles.yml", "profiles.yaml", "credentials.yml", "credentials.yaml", "service_account.json"}:
+        return False
+    return filename.endswith((".sql", ".yml", ".yaml", ".py", ".md", ".csv", ".json", ".txt", ".sh", ".toml", ".ini", ".j2"))
 
 
 def _tree(row: dict) -> tuple[list[dict], str]:
@@ -339,31 +350,33 @@ def _tree(row: dict) -> tuple[list[dict], str]:
 
 def _file(row: dict, path: str, sha: str) -> str:
     if not _safe_path(row, path):
-        raise team_portal.PortalError("The requested file is outside your team's project area", 403)
+        raise team_portal.PortalError("The requested file is outside the connected dbt project or not safe to preview", 403)
     url_path = "/".join(quote(part, safe="") for part in path.split("/"))
     data = _github(f"/repos/{row['repository']}/contents/{url_path}?ref={sha}")
     if data.get("encoding") != "base64" or data.get("type") != "file":
-        raise team_portal.PortalError("The requested Git model file cannot be read", 502)
+        raise team_portal.PortalError("The requested project file cannot be read", 502)
     blob = base64.b64decode(data["content"])
     if len(blob) > MAX_FILE_BYTES:
-        raise team_portal.PortalError("Model file is too large for the portal", 422)
+        raise team_portal.PortalError("Project file is too large for preview", 422)
     return blob.decode("utf-8")
 
 
 def inventory(role: str) -> dict:
     row = connection_for(role)
     if row is None:
-        return {"connection": None, "sources": [], "sourceFiles": [], "models": [], "revision": None}
+        return {"connection": None, "sources": [], "sourceFiles": [], "models": [], "files": [], "revision": None}
     entries, sha = _tree(row)
     project_files = sorted(item["path"] for item in entries)
+    team = TEAM_PREFIX[role]
+    models_root = row["subdirectory"] + "models/"
     source_paths = sorted(item["path"] for item in entries
                           if item["path"].endswith(".sql")
-                          and "/staging/" in item["path"])
+                          and item["path"].startswith(models_root + "staging/" + team + "/"))
     sources = sorted({Path(path).stem for path in source_paths})
     source_files = [{"name": Path(path).stem, "path": path} for path in source_paths]
     yaml_paths = sorted(item["path"] for item in entries
                         if item["path"].endswith((".yaml", ".yml"))
-                        and "/semantic_models/" in item["path"])
+                        and item["path"].startswith(models_root + "semantic_models/" + team + "/"))
     models = []
     for path in yaml_paths[:MAX_INVENTORY_FILES]:
         try:
