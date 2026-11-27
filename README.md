@@ -229,3 +229,9 @@ The toolbar now makes two distinct actions explicit:
 - **Restore automatic card positions** (`LayoutGrid`): intentionally clears custom node coordinates and returns the graph to its original auto-layout (at 100% zoom).
 
 **Fit all contracts** intentionally recenters and rescales the viewport when clicked. If you only want to read what a control does, hover it; no click is necessary.
+
+## Screen-anchored CDO lineage and simplified zoom controls
+
+The contract canvas renders connectors in an SVG overlay aligned to the **visible canvas viewport**, using the actual `getBoundingClientRect()` of each parent and child card. This ensures connectors follow their cards when contracts are dragged, the diagram is panned or zoomed, or the browser/sidebar changes size. Parent lookup still respects the exact `uses.name` and `uses.version` contract.
+
+The toolbar is intentionally just **Zoom out (−)**, **zoom percentage**, **Zoom in (+)**, and **Center canvas at 100%**. The center action recenters and resets view scale while preserving all manually moved card coordinates. There is no layout-reset action in the toolbar; saved positions remain intact. Help labels are displayed immediately on hover/focus. 
