@@ -1,3 +1,90 @@
+# Connect Existing dbt Project — first integration slice
+
+The **Connect Existing dbt Project** screen is under **CDO → Project connections**.
+After a platform administrator connects a team to its existing dbt Cloud project,
+Team A/C workspaces automatically discover **committed staging SQL, semantic
+model YAML, descriptions and CDO inheritance declarations** from that project's
+linked GitHub repository. No database or GitHub credentials are requested from
+team developers.
+
+## One-time platform operator configuration
+
+From a local development terminal, configure these secrets **on the Python
+backend only**. Do not commit them, paste them into React source or share them
+with Team A/C users.
+
+```bash
+export DBT_CLOUD_ACCOUNT_ID="YOUR_NUMERIC_DBT_ACCOUNT_ID"
+export DBT_CLOUD_HOST="cloud.getdbt.com" # or your account's regional API host
+export DBT_CLOUD_TOKEN="YOUR_DBT_SERVICE_ACCOUNT_TOKEN"
+export PORTAL_ADMIN_KEY="YOUR_LONG_RANDOM_ADMINISTRATOR_KEY"
+# Only needed for private GitHub repos or to avoid anonymous API rate limits:
+export PORTAL_GITHUB_READ_TOKEN="YOUR_SCOPED_GITHUB_READ_TOKEN"
+npm run dev:api
+```
+
+The token needs read access to the dbt Administrative API's project, repository
+and environment information. The optional GitHub credential needs read-only
+Contents/metadata access to the repo actually linked in dbt; a production
+deployment should replace this prototype token with a GitHub App. The
+administrator key is a **separate authorization key** for connection setup.
+
+In a second terminal run `npm run dev`. The backend remains loopback-only
+at `127.0.0.1:8765`.
+
+1. Choose **CDO** (demo role) and open **Project connections**.
+2. Enter the administrator key and select **Unlock project connections**.
+3. Select Team A or Team C, choose an existing dbt Cloud project, then a
+   development environment from that project. The backend looks up the **actual
+   linked GitHub repository** rather than trusting a manually entered URL.
+4. Select **Connect project to team**. Mappings are stored in the portal's
+   SQLite database, alongside drafts, and survive restarts.
+5. Visit the corresponding team workspace. The **Connected dbt project**
+   section shows the project, environment, repository, staging-model names
+   and semantic-model metadata. Click a staging model to view SQL or a semantic
+   model to view YAML, read-only.
+
+### What is and isn't reused yet
+
+- **Reused automatically:** dbt project identity, chosen environment,
+  GitHub repo/default branch and project subdirectory; committed Team A/C
+  staging and semantic model definitions; authored CDO inheritance reference.
+- **Not copied or requested:** Neon host, username, password, GitHub author
+  credentials or other dbt secrets. Those remain where the administrator
+  originally configured them in dbt Cloud/GitHub.
+- **Not implemented in this slice:** fetching arbitrary physical database
+  objects, importing model definitions into the editor for modification,
+  validating drafts against the **remote** dbt environment, or pushing commits
+  and PRs. The existing **Save Draft / Validate Model / Publish Model** still
+  operate against the **local portal-managed dbt Core workspace**. Do not
+  mistake that action for dbt Cloud or GitHub publication.
+- **GitHub only for now:** a dbt project with a GitLab, Azure DevOps or
+  dbt-managed repository is reported as unsupported for this first release.
+- **File scope:** the portal discovers committed model files in
+  `models/staging/team_a`, `models/semantic_models/team_a` (or `team_c`),
+  respecting `dbt_project_subdirectory` when present. Broader source files,
+  cross-team dependencies and run-derived metadata need separate, permissioned
+  discovery.
+
+### Security and limitations
+
+CDO/Team A/Team C selection is a **demo UI**, not real authentication.
+The Python backend requires the `PORTAL_ADMIN_KEY` to list/select/change
+connections, independently of the UI role. That key is entered only on the
+administrator screen and held in memory until the screen is closed (not saved
+in browser storage). Team discovery endpoints are read-only but **not yet
+authenticated**, so do not expose this localhost development service to other
+users or the internet. Production requires real SSO/session authentication,
+team membership authorization, project access policies, secret management and
+auditing.
+
+Existing contract authoring and published local drafts are preserved.
+No changes are made to `federated-semantic-poc` through the connection wizard.
+The future pre-PR database validation/publishing workflow will use the chosen
+dbt project/environment and a properly authorized backend integration; it is
+not enabled by this connection screen.
+
+---
 # Semantic Governance Portal — managed workspace (current)
 
 **Team A and Team C do not need to create or configure a dbt project.** The platform's
