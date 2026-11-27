@@ -146,10 +146,10 @@ export default function TeamWorkspace({ role }) {
           <RefreshCw size={15}/>{loading ? 'Loading...' : 'Refresh portal drafts'}
         </button></div>
       </div>
-      <div className="team-repository-line"><Database size={17}/><span>Source: <strong>Python portal backend</strong> · dbt Core: {dbtStatus?.dbtCoreAvailable?'installed':'not detected'} · dbt project: {dbtStatus?.localProjectConfigured?'configured':'not configured'} · CDO contracts: approved registry</span></div>
+      <div className="team-repository-line"><Database size={17}/><span>Source: <strong>Python portal backend</strong> · dbt Core: {dbtStatus?.dbtCoreAvailable?'installed':'not detected'} · dbt project: {dbtStatus?.localProjectConfigured?'configured':'not configured'} · dbt Cloud Admin: {dbtStatus?.remoteAdminConfigured?'configured':'not configured'} · CDO contracts: approved registry</span></div>
       {loading && <div className="team-loading" role="status">Loading portal drafts and approved CDO contracts…</div>}
       {error && <div className="team-error" role="alert"><AlertCircle size={18}/>Unable to load portal models or CDO registry: {error}. <button onClick={() => setGeneration(v => v + 1)}>Retry</button></div>}
-      {!loading && !error && !presentations.length && <div className="team-empty">No portal-authored models yet. Create a staging and semantic model to get started.</div>}
+      {!loading && !error && !models.length && <div className="team-empty">No portal-authored models yet. Create a staging and semantic model to get started.</div>}
       {!loading && !error && models.length > 0 && <section className="team-detail-section">
         <h3>Portal models and drafts <span>{models.length}</span></h3>
         <div className="team-draft-list">
