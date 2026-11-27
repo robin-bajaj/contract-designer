@@ -47,7 +47,7 @@ class PortalTests(unittest.TestCase):
         with self.assertRaisesRegex(portal.PortalError,"Validate"):
             portal.publish_draft(draft["id"])
         compiled=YAML.replace("description: An equity model","description: Native compiled model")
-        validated=portal.mark_validated(draft["id"],{"ok":True,"compiledYaml":compiled})
+        validated=portal.mark_validated(draft["id"],{"ok":True,"compiledYaml":compiled,"validationRevision":"a"*40,"validatedRepository":"example/team-a"})
         self.assertEqual(validated["status"],"validated")
         response={"status":"pr-open","repository":"example/team-a",
                   "prUrl":"https://github.com/example/team-a/pull/22",
@@ -56,7 +56,8 @@ class PortalTests(unittest.TestCase):
         with patch("server.github_publish.publish",return_value=response) as publish:
             result=portal.publish_draft(draft["id"])
         publish.assert_called_once()
-        self.assertEqual(publish.call_args.args[1],compiled)
+        self.assertEqual(publish.call_args.args[1],YAML)
+        self.assertEqual(publish.call_args.kwargs["expected_revision"],"a"*40)
         self.assertEqual(result["status"],"pr-open")
         self.assertEqual(portal.load_draft(draft["id"])["status"],"submitted")
         self.assertEqual(portal.load_draft(draft["id"])["prUrl"],response["prUrl"])
@@ -68,7 +69,7 @@ class PortalTests(unittest.TestCase):
 
     def test_changes_invalidate_validated_revision_and_block_publish(self):
         saved=portal.save_draft(payload())
-        portal.mark_validated(saved["id"],{"ok":True,"compiledYaml":YAML})
+        portal.mark_validated(saved["id"],{"ok":True,"compiledYaml":YAML,"validationRevision":"a"*40,"validatedRepository":"example/team-a"})
         changed=portal.save_draft({**payload(),"id":saved["id"],"sourceSql":"select 2 as position_id"})
         self.assertEqual(changed["status"],"draft")
         with self.assertRaisesRegex(portal.PortalError,"Validate"):
@@ -81,7 +82,7 @@ class PortalTests(unittest.TestCase):
 
     def test_remote_publish_failure_leaves_draft_validated(self):
         saved=portal.save_draft(payload())
-        portal.mark_validated(saved["id"],{"ok":True,"compiledYaml":YAML})
+        portal.mark_validated(saved["id"],{"ok":True,"compiledYaml":YAML,"validationRevision":"a"*40,"validatedRepository":"example/team-a"})
         with patch("server.github_publish.publish",
                    side_effect=portal.PortalError("GitHub permission denied",403)):
             with self.assertRaisesRegex(portal.PortalError,"GitHub permission denied"):
@@ -90,7 +91,7 @@ class PortalTests(unittest.TestCase):
 
     def test_published_sql_is_discoverable_as_source(self):
         saved=portal.save_draft(payload())
-        portal.mark_validated(saved["id"],{"ok":True,"compiledYaml":YAML})
+        portal.mark_validated(saved["id"],{"ok":True,"compiledYaml":YAML,"validationRevision":"a"*40,"validatedRepository":"example/team-a"})
         with patch("server.github_publish.publish",return_value={
             "status":"pr-open","prUrl":"https://github.com/example/team-a/pull/22",
             "prNumber":22}):
