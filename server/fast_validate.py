@@ -226,8 +226,8 @@ def validate_dbt(payload: object, *, runner=run_command) -> dict:
             # dbt's raw compilation trace is useful to developers, but the
             # model author needs an actionable message without reading logs.
             missing = re.search(
-                r"depends on a node named ['\\\"]([A-Za-z_][A-Za-z_0-9]*)['\\\"] which was not found",
-                re.sub(r"\\x1b\\[[0-9;]*m", "", exc.output),
+                r"""depends on a node named ['"]([A-Za-z_][A-Za-z_0-9]*)['"] which was not found""",
+                re.sub(r"\x1b\[[0-9;]*m", "", exc.output),
                 flags=re.IGNORECASE,
             )
             if exc.step == "dbt Core parse" and missing:
