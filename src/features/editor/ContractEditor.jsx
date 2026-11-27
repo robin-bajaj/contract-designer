@@ -38,7 +38,8 @@ export default function ContractEditor({
             <div className="editor-intro"><span className="eyebrow">{active.uses ? 'CHILD CONTRACT' : 'STANDALONE CONTRACT'}</span><p>{active.uses ? 'Select definitions to inherit from a versioned parent contract' : 'Define reusable enterprise business attributes and governed metrics'}</p></div>
             <h3 className="section-title">Contract Details</h3>
             <div className="form-grid"><label>Contract Name<input value={active.name} onChange={e => updateField('name', e.target.value)}/></label><label>Contract Version<input type="number" min="1" value={active.version} onChange={e => updateField('version', Number(e.target.value))}/></label></div>
-            <label className="full-field">Description<input value={active.description} onChange={e => updateField('description', e.target.value)}/></label>
+            <label className="full-field">Description<input value={active.description || ''} onChange={e => updateField('description', e.target.value)} placeholder="Describe the contract's business purpose"/></label>
+            {active.uses && <p className="muted contract-description-note">The current CDO registry only supports descriptions in standalone contract YAML. Child descriptions remain editor-only.</p>}
             {active.uses ? <>
               <h3 className="section-title">Parent Contract</h3>
               <div className="form-grid"><label>Parent<select value={active.uses.name} onChange={e => update(c => ({...c, uses: {name: e.target.value, version: contracts.find(p => p.name === e.target.value)?.version || 1}, include: {attributes: [], metrics: []}}))}>{contracts.filter(c => c.id !== active.id).map(c => <option key={c.id} value={c.name}>{c.name}</option>)}</select></label><label>Parent Version<input value={active.uses.version} type="number" min="1" onChange={e => update(c => ({ ...c, uses: {...c.uses, version: Number(e.target.value)} }))}/></label></div>
