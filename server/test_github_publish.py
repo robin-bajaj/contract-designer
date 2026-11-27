@@ -49,7 +49,7 @@ class PublishToGithubTests(unittest.TestCase):
     def test_new_model_creates_atomic_commit_feature_branch_and_pr(self):
         calls,fake=self.fake_requests()
         with patch.object(pub,"_request",side_effect=fake):
-            result=pub.publish(DRAFT,YAML)
+            result=pub.publish(DRAFT,YAML,expected_revision=SHA,expected_repository="example/team-a")
         self.assertEqual(result["status"],"pr-open")
         self.assertEqual(result["prNumber"],5)
         self.assertEqual(result["base"],"main")
@@ -70,21 +70,28 @@ class PublishToGithubTests(unittest.TestCase):
         calls,fake=self.fake_requests(existing=(sql,))
         existing={**DRAFT,"sourceMode":"existing","sourceSql":None}
         with patch.object(pub,"_request",side_effect=fake):
-            result=pub.publish(existing,YAML)
+            result=pub.publish(existing,YAML,expected_revision=SHA,expected_repository="example/team-a")
         self.assertEqual(result["paths"],["models/semantic_models/team_a/equity_new.yml"])
+
+    def test_branch_moved_after_validation_cannot_publish(self):
+        calls,fake=self.fake_requests()
+        with patch.object(pub,"_request",side_effect=fake):
+            with self.assertRaisesRegex(team_portal.PortalError,"changed after validation"):
+                pub.publish(DRAFT,YAML,expected_revision="e"*40,expected_repository="example/team-a")
+        self.assertFalse(any(method=="POST" for _,method,_ in calls))
 
     def test_no_write_if_remote_file_already_exists(self):
         calls,fake=self.fake_requests(existing=("models/staging/team_a/team_a_new.sql",))
         with patch.object(pub,"_request",side_effect=fake):
             with self.assertRaisesRegex(team_portal.PortalError,"already exist"):
-                pub.publish(DRAFT,YAML)
+                pub.publish(DRAFT,YAML,expected_revision=SHA,expected_repository="example/team-a")
         self.assertFalse(any(method=="POST" for _,method,_ in calls))
 
     def test_no_write_if_existing_source_absent(self):
         calls,fake=self.fake_requests()
         with patch.object(pub,"_request",side_effect=fake):
             with self.assertRaisesRegex(team_portal.PortalError,"missing"):
-                pub.publish({**DRAFT,"sourceMode":"existing","sourceSql":None},YAML)
+                pub.publish({**DRAFT,"sourceMode":"existing","sourceSql":None},YAML,expected_revision=SHA,expected_repository="example/team-a")
         self.assertFalse(any(method=="POST" for _,method,_ in calls))
 
     def test_no_publication_without_connected_token(self):
@@ -93,7 +100,7 @@ class PublishToGithubTests(unittest.TestCase):
         calls,fake=self.fake_requests()
         with patch.object(pub,"_request",side_effect=fake):
             with self.assertRaisesRegex(team_portal.PortalError,"Connect GitHub"):
-                pub.publish(DRAFT,YAML)
+                pub.publish(DRAFT,YAML,expected_revision=SHA,expected_repository="example/team-a")
         self.assertEqual(calls,[])
 
     def test_only_team_owned_paths_are_generated(self):
@@ -105,7 +112,7 @@ class PublishToGithubTests(unittest.TestCase):
                VALUES ('team-c',1,'Other',1,'Dev','example/other','main','', 'now', ?)""",
                (pc._encrypt("different-secret"),))
         with patch.object(pub,"_request",side_effect=fake):
-            result=pub.publish(DRAFT,YAML)
+            result=pub.publish(DRAFT,YAML,expected_revision=SHA,expected_repository="example/team-a")
         self.assertTrue(all(path.startswith(("models/staging/team_a/","models/semantic_models/team_a/"))
                             for path in result["paths"]))
 
