@@ -16,7 +16,7 @@ function makeTree(paths) {
 }
 
 function TreeFolder({node,depth=0,filterActive,onOpen,onCreate}) {
-  const [expanded,setExpanded] = useState(depth < 2)
+  const [expanded,setExpanded] = useState(depth < 3)
   const isOpen = filterActive || expanded
   return <div>
     {depth > 0 && <div className="dbt-tree-row" style={{paddingLeft: 8 + (depth-1)*17}}>
