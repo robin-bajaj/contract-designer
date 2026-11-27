@@ -364,3 +364,13 @@ The CDO editor and Team A/C semantic-model editor now use a denser, developer-fr
 **CDO child descriptions:** The governance registry currently enforces a strict `name/version/uses/include` child schema that does not allow a top-level `description`. The editor notes this limitation rather than generating child YAML that would fail the registry validator. Extending the child-contract schema should be a separate coordinated change in the governance repository.
 
 This is a UI-density and serialization fix; no changes to underlying CDO inheritance rules, dbt validation or team model publishing.
+
+## Team A/C: CDO inheritance and missing staging references
+
+In **Create Semantic Model**, open **3. CDO contract → Inherit a versioned contract** and choose `cdo.position · v1` (or another approved contract). Mark the inherited attributes and metrics to include, optionally choose semantic annotations and team aliases, and set an aggregation time dimension if needed. The authored YAML preview displays `config.meta.uses.name/version` and the explicit `include` selections. **Validate Model** runs the CDO compiler and dbt Core parser; publish stores the compiled, native dbt YAML in the managed workspace.
+
+The approved CDO contract registry is loaded automatically. If an optional, previously configured `CDO_GOVERNANCE_PATH` points to a missing/moved checkout, the backend now retrieves approved contracts from governance GitHub `main` instead of refusing validation. It never synchronizes Team A/C models with the paused `federated-semantic-poc` repo.
+
+For a **new staging model**, use a standalone SQL `SELECT` or reference an existing model published in the portal-managed dbt project. For example, `{{ ref('team_a_positions') }}` will fail if `team_a_positions` only exists in the former federated repo; dbt cannot resolve it in the new workspace. The editor no longer advertises a nonexistent `ref` in its default example, and validation explains how to correct missing-model errors without hiding the raw dbt log.
+
+A passing `dbt parse` is not physical database execution. Production SQL still requires a warehouse-backed run/build.
