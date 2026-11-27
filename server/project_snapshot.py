@@ -16,7 +16,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
-from . import project_connections, team_portal
+from . import project_connections, team_portal, team_ids
 
 SHA = re.compile(r"^[a-f0-9]{40}$")
 MAX_ARCHIVE_BYTES = 35 * 1024 * 1024
@@ -26,9 +26,10 @@ MAX_FILES = 6000
 
 def team_folder(role: str) -> str:
     """A safe, stable folder convention; no team-specific branches."""
-    if not isinstance(role, str) or not re.fullmatch(r"team-[a-z][a-z0-9-]{0,48}", role):
-        raise team_portal.PortalError("Invalid team identifier", 400)
-    return role.replace("-", "_")
+    try:
+        return team_ids.folder(role)
+    except ValueError as exc:
+        raise team_portal.PortalError(str(exc), 400) from exc
 
 
 def snapshot(role: str, destination: Path) -> dict:
