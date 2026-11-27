@@ -164,6 +164,17 @@ export default function TeamWorkspace({ role }) {
     } catch (err) { setDraftActionError(err.message) }
   }
 
+  // Older running Python backends return sourceFiles/models but not files.
+  // Use what was actually discovered, rather than displaying a blank explorer.
+  const discoveredFiles = useMemo(() => {
+    const catalog = connectedCatalog || {}
+    return [...new Set([
+      ...(Array.isArray(catalog.files) ? catalog.files : []),
+      ...(Array.isArray(catalog.sourceFiles) ? catalog.sourceFiles.map(file => file.path) : []),
+      ...(Array.isArray(catalog.models) ? catalog.models.map(model => model.file) : []),
+    ].filter(Boolean))].sort()
+  }, [connectedCatalog])
+
   const presentations = useMemo(() => models.flatMap(draft => {
     if (!draft.yamlText?.trim()) return []
     try {
@@ -192,6 +203,21 @@ export default function TeamWorkspace({ role }) {
         </button></div>
       </div>
       <div className="team-repository-line" role="status"><Database size={17}/><span><strong>{dbtStatus?.workspaceReady ? 'Model workspace ready' : 'Preparing model workspace'}</strong> · {dbtStatus?.validationReady ? 'Validation service available' : 'Validation service unavailable — contact the administrator'} · Approved CDO contracts available</span></div>
+      <div className="dbt-studio-layout">
+        <aside className="dbt-studio-sidebar" aria-label="dbt project files">
+          <div className="dbt-sidebar-heading">
+            <Database size={17}/>
+            <div><strong>{connectedCatalog?.connection?.projectName || 'dbt project'}</strong><small>{connectedCatalog?.connection?.repository || 'Connect a dbt Cloud project'}</small></div>
+            <button type="button" className="outline" title="Refresh project files" onClick={()=>setGeneration(v=>v+1)}><RefreshCw size={15}/></button>
+          </div>
+          {!catalogLoading && connectedCatalog?.connection && !Array.isArray(connectedCatalog.files) &&
+            <p className="dbt-backend-warning">Your Python API is still running an older version. Restart <code>npm run dev:api</code> to discover the full repository. Showing the files already discovered.</p>}
+          {connectedCatalog?.connection
+            ? <ProjectFileTree paths={discoveredFiles} onOpen={openConnectedFile}
+                onCreate={()=>{setEditing(null);setCreating(true)}}/>
+            : <p className="dbt-backend-warning">Connect your project to browse files.</p>}
+        </aside>
+        <div className="dbt-studio-main">
       <section className="team-detail-section team-connected-project" aria-label="Connected dbt Cloud project inventory">
         <h3><GitBranch size={18}/> Connected dbt project</h3>
         {catalogLoading && <p role="status">Discovering models from the connected project…</p>}
@@ -205,14 +231,14 @@ export default function TeamWorkspace({ role }) {
             <div><span>Discovered staging models</span><strong>{connectedCatalog.sources.length}</strong></div>
           </div>
           <p>Existing definitions are read from the connected repository. Database credentials stay in dbt Cloud. These previews are read-only; validation and remote editing integration will follow.</p>
-          <h4>dbt Project Explorer · read-only</h4>
-          <p>Browse the committed project structure, including dbt_project.yml, models, macros, seeds, tests and other source files.</p>
-          <ProjectFileTree paths={connectedCatalog.files || []}
-            onOpen={openConnectedFile}
-            onCreate={()=>{setEditing(null);setCreating(true)}}/>
-          <p>GitHub revision {connectedCatalog.revision?.slice(0,7)||'unknown'} · Click a file to preview it below. The + option creates a portal draft, not a GitHub file.</p>
+          <p>Browse and open files in the left-hand dbt project explorer. Files are read-only until GitHub editing is connected.</p>
           <button type="button" className="primary team-create-button" onClick={()=>{setEditing(null);setCreating(true)}}><Plus size={15}/> Create model draft</button>
-          <p>Direct remote editing and GitHub pull-request publication are not yet implemented.</p>
+          {openedFileLoading && <p role="status">Opening file…</p>}
+          {openedFileError && <p className="team-error" role="alert">{openedFileError}</p>}
+          {openedFile && <div className="team-connected-file">
+            <div><strong>{openedFile.path}</strong><button className="outline" onClick={()=>setOpenedFile(null)} type="button">Close file</button></div>
+            <pre aria-label="Connected project source">{openedFile.content}</pre>
+          </div>}
           <h4>Staging models</h4>
           {connectedCatalog.sources.length ? <div className="team-connected-source-list">
             {(connectedCatalog.sourceFiles||[]).map(file=><button type="button" key={file.path} className="team-connected-source" disabled={openedFileLoading} onClick={()=>openConnectedFile(file.path)} title="View source SQL">{file.name}</button>)}
@@ -226,12 +252,7 @@ export default function TeamWorkspace({ role }) {
             </div>)}
           </div> : <p>No semantic YAML definitions found in this team's model folder.</p>}
           {connectedCatalog.limited && <p>Showing the first 60 semantic YAML files. Ask the administrator to narrow the repository for larger projects.</p>}
-          {openedFileLoading && <p role="status">Loading source definition…</p>}
-          {openedFileError && <p className="team-error" role="alert">{openedFileError}</p>}
-          {openedFile && <div className="team-connected-file">
-            <div><strong>{openedFile.path}</strong><button className="outline" onClick={()=>setOpenedFile(null)} type="button">Close preview</button></div>
-            <pre aria-label="Connected dbt model file">{openedFile.content}</pre>
-          </div>}
+
         </>}
       </section>
       {loading && <div className="team-loading" role="status">Loading your models and approved contracts…</div>}
@@ -262,6 +283,8 @@ export default function TeamWorkspace({ role }) {
         <ModelDetails model={currentModel}/>
       </>}
       <p className="team-demo-note">Your drafts and published definitions stay in this portal workspace. Remote deployment is not enabled yet. Role selection remains a development prototype.</p>
+        </div>
+      </div>
     </main>
   </div>
 }
