@@ -13,6 +13,7 @@ import re
 import sqlite3
 import uuid
 from datetime import datetime, timezone
+from .managed_project import ensure_project
 
 IDENTIFIER = re.compile(r"^[a-z][a-z0-9_]*$")
 TEAMS = {"team-a": "team_a", "team-c": "team_c"}
@@ -26,9 +27,9 @@ class PortalError(ValueError):
         self.status = status
 
 
-def project_path() -> Path | None:
-    value = os.environ.get("DBT_PROJECT_PATH", "").strip()
-    return Path(value).expanduser().resolve() if value else None
+def project_path() -> Path:
+    """Return the auto-created workspace. No DBT_PROJECT_PATH is needed."""
+    return ensure_project(database_path().parent)
 
 
 def database_path() -> Path:
@@ -221,7 +222,7 @@ def source_models(role: str) -> list[str]:
     team = TEAMS[role]
     sources = set()
     project = project_path()
-    if project and (project / "dbt_project.yml").is_file():
+    if (project / "dbt_project.yml").is_file():
         folder = project / "models" / "staging" / team
         if folder.exists():
             sources.update(p.stem for p in folder.glob("*.sql") if IDENTIFIER.fullmatch(p.stem))
@@ -232,13 +233,13 @@ def source_models(role: str) -> list[str]:
 
 
 def publish_draft(draft_id: str) -> dict:
-    """Export validated native dbt files into a configured *local* dbt project.
+    """Publish validated native dbt files into the portal-managed workspace.
 
     This does NOT push to Git or update the remote dbt Studio workspace.
     """
     project = project_path()
-    if not project or not (project / "dbt_project.yml").is_file():
-        raise PortalError("Configure DBT_PROJECT_PATH to an existing dbt project first", 503)
+    if not (project / "dbt_project.yml").is_file():
+        raise PortalError("Managed model workspace is unavailable", 503)
     draft = load_draft(draft_id)
     with connect() as conn:
         row = conn.execute("SELECT validated_digest, compiled_yaml FROM drafts WHERE id=?",
@@ -276,4 +277,4 @@ def publish_draft(draft_id: str) -> dict:
         conn.execute("UPDATE drafts SET published_at=?,updated_at=? WHERE id=?",
                      (now(), now(), draft_id))
     return {"status": "published-local", "paths": [str(path.relative_to(project)) for path, _ in files],
-            "message": "Files written to configured local dbt project; no remote Studio/Git deployment was triggered"}
+            "message": "Model published to your portal workspace. Remote deployment is not yet connected."}
