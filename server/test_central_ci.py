@@ -100,6 +100,21 @@ class CentralValidationTests(unittest.TestCase):
         with patch("server.github_app_ci.central_ci.candidate_role", return_value="team-risk"):
             self.assertIsNone(github_app_ci.parse_event("pull_request", payload))
 
+    def test_check_run_updates_one_existing_check_instead_of_creating_two(self):
+        calls = []
+        def request(endpoint, token, *, method="GET", body=None):
+            calls.append((endpoint, method, body))
+            return {"id": 999}
+        with patch("server.github_app_ci.github_request", side_effect=request):
+            check_id = github_app_ci.check_run("token", EVENT, "in_progress")
+            github_app_ci.check_run("token", EVENT, "completed",
+                                    result={"ok": True, "summary": "All passed"},
+                                    check_id=check_id)
+        self.assertEqual(check_id, 999)
+        self.assertEqual([call[1] for call in calls], ["POST", "PATCH"])
+        self.assertTrue(calls[1][0].endswith("/check-runs/999"))
+        self.assertEqual(calls[1][2]["conclusion"], "success")
+
     def test_durable_queue_deduplicates_webhook_delivery(self):
         a = central_ci_queue.enqueue(EVENT)
         self.assertEqual(a, central_ci_queue.enqueue(EVENT))
