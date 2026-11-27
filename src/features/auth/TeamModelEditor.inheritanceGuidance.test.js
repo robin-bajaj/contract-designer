@@ -18,7 +18,9 @@ test('CDO inheritance is selectable and feeds the generated YAML',()=>{
 test('staging placeholder does not suggest a nonexistent dbt ref',()=>{
   assert.match(editor,/150\.25::numeric as profit_loss/)
   assert.match(editor,/current_date as report_date/)
-  assert.doesNotMatch(editor,/placeholder=\{\`select.*ref\(/s)
+  const snippet=editor.match(/placeholder=\{\`select[\s\S]*?\`\}\/>/)?.[0]
+  assert.ok(snippet, 'A safe standalone SQL placeholder is present')
+  assert.doesNotMatch(snippet,/ref\(/)
   assert.match(editor,/only for a model already published in this portal/)
 })
 
