@@ -218,6 +218,7 @@ export default function TeamModelEditor({role,contracts,sourceModels,onBack,init
           <h4>{validationResult.ok?<CheckCircle2 size={17}/>:<AlertCircle size={17}/>}
             {validationResult.ok?'Model validation passed':'Model validation did not pass'}</h4>
           {validationResult.error && <p>{validationResult.error}</p>}
+          {validationResult.diagnostics?.length > 1 && <ul className="team-error-list">{validationResult.diagnostics.map((issue,index)=><li key={`${issue.code}-${issue.field}-${index}`}>{issue.message}</li>)}</ul>}
           {validationResult.ok && !validationResult.validationRevision && <p>Local-only validation passed. Connect this team to a dbt Cloud project and validate against its complete GitHub repository before creating a pull request.</p>}
           {validationResult.validationRevision && <p>Validated against connected Git revision {validationResult.validationRevision.slice(0,12)}.</p>}
           {validationResult.hint && <p className="team-validation-hint">{validationResult.hint}</p>}
