@@ -123,10 +123,10 @@ export default function TeamModelEditor({role,contracts,sourceModels,onBack,init
           </label>
           <label>Staging SQL editor
             <textarea value={draft.sourceSql} onChange={e=>setField('sourceSql',e.target.value)} spellCheck={false} rows={7}
-              placeholder={`select\n  position_id,\n  report_date,\n  profit_loss,\n  instrument_code\nfrom {{ ref('stg_${role==='team-a'?'team_a':'team_c'}_positions') }}`}/>
+              placeholder={`select\n  'EQ-001'::text as position_id,\n  current_date as report_date,\n  150.25::numeric as profit_loss,\n  125.50::numeric as mtm,\n  50.00::numeric as cash,\n  1001::integer as instrument_code`}/>
           </label>
           <LiveStagingStatus role={role} sourceModel={draft.sourceModel} sourceSql={draft.sourceSql}/>
-          <p className="team-editor-note">Your work is saved in the portal. Automatic checks review model structure, but do not execute SQL against the database.</p>
+          <p className="team-editor-note">Start with a standalone SELECT, or use <code>{'{{ ref(\'model_name\') }}'}</code> only for a model already published in this portal. Models in the paused federated repository are not available here. Checks do not execute SQL.</p>
         </>}
       </section>
 
@@ -218,6 +218,7 @@ export default function TeamModelEditor({role,contracts,sourceModels,onBack,init
           <h4>{validationResult.ok?<CheckCircle2 size={17}/>:<AlertCircle size={17}/>}
             {validationResult.ok?'Model validation passed':'Model validation did not pass'}</h4>
           {validationResult.error && <p>{validationResult.error}</p>}
+          {validationResult.hint && <p className="team-validation-hint">{validationResult.hint}</p>}
           {validationResult.steps?.length>0 && <ul>{validationResult.steps.map((step,index)=><li key={index}>
             {step.status==='passed'?<CheckCircle2 size={14}/>:<AlertCircle size={14}/>}
             {step.name} — {step.status}

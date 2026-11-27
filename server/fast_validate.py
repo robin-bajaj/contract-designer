@@ -178,15 +178,18 @@ def validate_dbt(payload: object, *, runner=run_command) -> dict:
                 model = yaml.safe_load(data["yaml"])["models"][0]
                 meta = (model.get("config") or {}).get("meta") or {}
                 if "uses" in meta or "cdo" in meta or "semantic_inheritance" in meta:
-                    governance_path = os.environ.get("CDO_GOVERNANCE_PATH")
-                    if governance_path:
-                        gov = Path(governance_path).expanduser().resolve()
-                        if not (gov / "contracts").is_dir() or not (gov / "src").is_dir():
-                            raise InputError("CDO_GOVERNANCE_PATH must contain contracts/ and src/")
+                    # Local path is only an optional performance hint. If it
+                    # points to an old/moved folder, transparently fetch the
+                    # approved governance registry instead of blocking a team.
+                    configured = os.environ.get("CDO_GOVERNANCE_PATH", "").strip()
+                    local_gov = Path(configured).expanduser().resolve() if configured else None
+                    if local_gov and (local_gov / "contracts").is_dir() and (local_gov / "src").is_dir():
+                        gov = local_gov
                     else:
                         runner("Load approved CDO contracts",
                                ["git", "clone", "--quiet", "--depth", "1", "--branch", "main",
                                 GOVERNANCE_URL, str(gov)], root, timeout=45)
+                    steps.append({"name": "Load approved CDO contracts", "status": "passed"})
                     env["PYTHONPATH"] = str(gov / "src") + os.pathsep + env.get("PYTHONPATH", "")
                     runner("CDO registry validation",
                            [shutil.which("python3") or "python3", "-m", "cdo_governance.semantic.contract_registry",
@@ -220,7 +223,23 @@ def validate_dbt(payload: object, *, runner=run_command) -> dict:
                     "compiledYaml": yaml_path.read_text(encoding="utf-8") if yaml_path else None}
         except StepFailure as exc:
             steps.append({"name": exc.step, "status": "failed"})
-            return {"ok": False, "steps": steps, "log": exc.output, "error": f"{exc.step} failed", "mode": "parse-only"}
+            # dbt's raw compilation trace is useful to developers, but the
+            # model author needs an actionable message without reading logs.
+            missing = re.search(
+                r"""depends on a node named ['"]([A-Za-z_][A-Za-z_0-9]*)['"] which was not found""",
+                re.sub(r"\x1b\[[0-9;]*m", "", exc.output),
+                flags=re.IGNORECASE,
+            )
+            if exc.step == "dbt Core parse" and missing:
+                name = missing.group(1)
+                return {
+                    "ok": False, "steps": steps, "log": exc.output,
+                    "error": f"Referenced model '{name}' does not exist in this workspace.",
+                    "hint": "Use a model already published in this portal, or write standalone staging SQL without ref(). Models in the paused federated project are not available here.",
+                    "mode": "parse-only",
+                }
+            return {"ok": False, "steps": steps, "log": exc.output,
+                    "error": f"{exc.step} failed", "mode": "parse-only"}
         except InputError as exc:
             steps.append({"name": "Validate source files", "status": "failed"})
             return {"ok": False, "steps": steps, "log": str(exc), "error": str(exc), "mode": "parse-only"}
