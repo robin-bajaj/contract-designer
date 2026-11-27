@@ -202,8 +202,7 @@ models:
             result = validate_dbt(PAYLOAD, runner=runner)
         self.assertFalse(result["ok"])
         self.assertIn("team_a_positions", result["error"])
-        self.assertIn("standalone staging SQL", result["hint"])
-        self.assertIn("paused federated", result["hint"])
+        self.assertIn("connected dbt project", result["hint"])
         self.assertEqual(result["steps"][-1], {"name": "dbt Core parse", "status": "failed"})
 
 if __name__=="__main__":
