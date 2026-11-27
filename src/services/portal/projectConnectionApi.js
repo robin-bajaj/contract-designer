@@ -33,5 +33,7 @@ export const teamConnectedFile=(role,path,fetchImpl=fetch)=>
 
 export const leadGithubStatus=(role,fetchImpl=fetch)=>
   call(`/api/lead/github/status?role=${encodeURIComponent(role)}`,{fetchImpl})
-export const leadVerifyGithub=(role,fetchImpl=fetch)=>
-  call('/api/lead/github/verify',{data:{role},fetchImpl})
+export const leadConnectGithubToken=(role,token,fetchImpl=fetch)=>
+  call('/api/lead/github/connect',{data:{role,token},fetchImpl})
+export const leadDisconnectGithub=(role,fetchImpl=fetch)=>
+  call('/api/lead/github/disconnect',{data:{role},fetchImpl})
