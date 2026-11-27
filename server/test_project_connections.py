@@ -92,7 +92,7 @@ class TeamLeadConnectionTests(unittest.TestCase):
         with self.assertRaises(team_portal.PortalError):
             pc.assign("team-a",{**self.payload,"projectId":17,"environmentId":102})
         with self.assertRaises(team_portal.PortalError):
-            pc.assign("team-c",{**self.payload,"projectId":17,"environmentId":101})
+            pc.assign("cdo",{**self.payload,"projectId":17,"environmentId":101})
         for host in ("localhost","evil.example","https://cloud.getdbt.com","cloud.getdbt.com/path"):
             with self.assertRaises(dbt_cloud.DbtCloudError):
                 pc.preview_account("team-a",{**self.payload,"apiHost":host})
