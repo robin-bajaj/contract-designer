@@ -89,8 +89,8 @@ class FastValidationTests(unittest.TestCase):
                 (project / "target").mkdir()
                 (project / "target/manifest.json").write_text("{}")
             return "ok"
-        with patch("server.fast_validate.project_connections.connection_for", return_value=connection), \\
-             patch("server.fast_validate.project_snapshot.snapshot", side_effect=snapshot), \\
+        with patch("server.fast_validate.project_connections.connection_for", return_value=connection), \
+             patch("server.fast_validate.project_snapshot.snapshot", side_effect=snapshot), \
              patch("server.fast_validate.shutil.which", return_value="/usr/bin/dbt"):
             result = validate_dbt(draft, runner=runner)
         self.assertTrue(result["ok"], result)
