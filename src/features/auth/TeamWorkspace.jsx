@@ -61,7 +61,6 @@ export default function TeamWorkspace({ role }) {
 
   if (isEditorOpen) return <div className="team-page">
     <TeamModelEditor
-      key={editing?.id || 'new'}
       role={role}
       contracts={contracts}
       sourceModels={findLocalSql(drafts, editing?.id)}
