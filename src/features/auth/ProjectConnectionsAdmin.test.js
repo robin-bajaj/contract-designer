@@ -4,29 +4,29 @@ import {readFileSync} from 'node:fs'
 import {fileURLToPath} from 'node:url'
 
 const read=path=>readFileSync(fileURLToPath(new URL(path,import.meta.url)),'utf8')
-const gateway=read('./RoleGateway.jsx')
 const admin=read('./ProjectConnectionsAdmin.jsx')
 const workspace=read('./TeamWorkspace.jsx')
 const backend=read('../../../server/fast_validate.py')
 
-test('only CDO-facing navigation exposes the connection wizard; backend enforces key',()=>{
-  assert.match(gateway,/canAccessDesigner\(role\)/)
-  assert.match(gateway,/ProjectConnectionsAdmin/)
-  assert.match(gateway,/Project connections/)
-  assert.match(admin,/Portal administrator key/)
-  assert.match(admin,/type="password"/)
-  assert.match(backend,/project_connections\.require_admin\(self\.headers\.get\("X-Portal-Admin-Key"\)\)/)
+test('Team A/C leads configure dbt inside team workspace; CDO cannot authorize it',()=>{
+  assert.match(workspace,/setConnecting\(true\)/)
+  assert.match(workspace,/Team Lead: Connect dbt Project/)
+  assert.match(workspace,/ProjectConnectionsAdmin role=\{role\}/)
+  assert.match(admin,/Team Lead access code/)
+  assert.match(admin,/dbt Cloud account ID/)
+  assert.match(admin,/dbt Cloud service token/)
+  assert.match(admin,/dbt Cloud API host/)
+  assert.match(backend,/X-Portal-Lead-Key/)
+  assert.doesNotMatch(backend,/X-Portal-Admin-Key/)
 })
-test('team workspace discovers connected models and read-only source SQL and YAML',()=>{
+test('Team Lead secrets are erased after save and never stored in browser storage',()=>{
+  assert.match(admin,/setServiceToken\(''\)/)
+  assert.match(admin,/setLeadKey\(''\)/)
+  assert.doesNotMatch(admin,/localStorage|sessionStorage|document\.cookie/)
+})
+test('team workspace still displays existing Git SQL and YAML read-only',()=>{
   assert.match(workspace,/teamConnectedModels\(role\)/)
   assert.match(workspace,/teamConnectedFile\(role,path\)/)
-  assert.match(workspace,/Connected dbt project/)
   assert.match(workspace,/View source YAML/)
   assert.match(workspace,/View source SQL/)
-  assert.match(workspace,/read-only/)
-})
-test('dbt API and GitHub tokens are not entered into the React wizard',()=>{
-  assert.doesNotMatch(admin,/input.*DBT_CLOUD_TOKEN/)
-  assert.doesNotMatch(admin,/input.*PORTAL_GITHUB_READ_TOKEN/)
-  assert.match(admin,/credentials remain in dbt Cloud/)
 })
