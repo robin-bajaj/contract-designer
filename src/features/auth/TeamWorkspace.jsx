@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { AlertCircle, CheckCircle2, Database, ExternalLink, GitBranch, Plus, RefreshCw } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Database, GitBranch, Plus, RefreshCw } from 'lucide-react'
 import { ROLE_OPTIONS } from './roles.js'
-import { fetchTeamSemanticModels, FEDERATED_REPO } from '../../services/github/teamSemanticRegistry.js'
+import { parseTeamSemanticFile } from '../../services/github/teamSemanticRegistry.js'
+import { listPortalModels, listPortalSources, dbtBackendStatus } from '../../services/portal/teamPortalApi.js'
 import { fetchGovernanceContracts } from '../../services/github/githubRegistry.js'
-import { fetchTeamSourceModels } from '../../services/github/teamSourceRegistry.js'
 import TeamModelEditor from './TeamModelEditor.jsx'
 import { describeTeamSemanticModel } from '../../domain/semantics/teamModelView.js'
 import './TeamWorkspace.css'
@@ -85,9 +85,7 @@ function ModelDetails({ model }) {
         empty="No team-owned metrics declared"
         renderRows={(metric,i) => <tr key={`${metric.name}-${i}`}><td><strong>{metric.name}</strong>{metric.label && <small>{metric.label}</small>}</td><td>{identifier(metric.type)} / {identifier(metric.agg)}</td><td>{identifier(metric.expr)}</td><td>{identifier(metric.description)}</td></tr>}/>
     </section>
-    <a className="team-source-link" href={`https://github.com/${FEDERATED_REPO}/blob/main/${model.sourcePath}`} target="_blank" rel="noopener noreferrer">
-      <ExternalLink size={15}/> View authored YAML in GitHub
-    </a>
+    <p className="team-demo-note">Authored model is stored in the portal; its compiled native YAML is published only after dbt Core validation.</p>
   </div>
 }
 
@@ -97,6 +95,8 @@ export default function TeamWorkspace({ role }) {
   const [contracts, setContracts] = useState([])
   const [sourceModels,setSourceModels] = useState([])
   const [creating,setCreating] = useState(false)
+  const [editing,setEditing] = useState(null)
+  const [dbtStatus,setDbtStatus] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [selectedId, setSelectedId] = useState(null)
@@ -109,12 +109,13 @@ export default function TeamWorkspace({ role }) {
     setModels([])
     setContracts([])
     setSourceModels([])
-    Promise.all([fetchTeamSemanticModels(role), fetchGovernanceContracts(), fetchTeamSourceModels(role)])
-      .then(([teamModels, approvedContracts, ownedSql]) => {
+    Promise.all([listPortalModels(role), fetchGovernanceContracts(), listPortalSources(role), dbtBackendStatus()])
+      .then(([teamModels, approvedContracts, ownedSql, status]) => {
         if (!active) return
         setModels(teamModels)
         setContracts(approvedContracts)
         setSourceModels(ownedSql)
+        setDbtStatus(status)
         setSelectedId(current => teamModels.some(item => item.id === current) ? current : teamModels[0]?.id || null)
       })
       .catch(err => { if (active) setError(err.message) })
@@ -122,35 +123,54 @@ export default function TeamWorkspace({ role }) {
     return () => { active = false }
   }, [role, generation])
 
-  const presentations = useMemo(() => models.map(model => describeTeamSemanticModel(model, contracts)), [models, contracts])
+  const presentations = useMemo(() => models.flatMap(draft => {
+    if (!draft.yamlText?.trim()) return []
+    try {
+      const parsed=parseTeamSemanticFile(draft.yamlText, `${draft.semanticName}.yml`, role)[0]
+      return parsed ? [describeTeamSemanticModel({...parsed,id:draft.id}, contracts)] : []
+    } catch { return [] }
+  }), [models, contracts, role])
   const currentModel = presentations.find(model => model.id === selectedId) || presentations[0]
 
-  if (creating) return <div className="team-page"><TeamModelEditor role={role} contracts={contracts} sourceModels={sourceModels} onBack={()=>setCreating(false)}/></div>
+  if (creating) return <div className="team-page"><TeamModelEditor key={editing?.id||'new'} role={role} contracts={contracts}
+    sourceModels={sourceModels} initialDraft={editing}
+    onBack={()=>{setCreating(false);setEditing(null);setGeneration(value=>value+1)}}/></div>
 
   return <div className="team-page">
     <main className="team-dashboard">
       <div className="team-dashboard-title">
-        <div><span className="team-label">FEDERATED SEMANTIC MODELS</span><h1>{workspace?.label} Workspace</h1>
-          <p>{workspace?.description} · Discover existing models and propose new team-owned models via GitHub PR.</p></div>
-        <div className="team-dashboard-actions"><button type="button" className="primary team-create-button" disabled={loading||Boolean(error)} onClick={()=>setCreating(true)}><Plus size={15}/> Create Semantic Model</button>
+        <div><span className="team-label">PORTAL-OWNED SEMANTIC MODELS</span><h1>{workspace?.label} Workspace</h1>
+          <p>{workspace?.description} · Create staging and semantic models here, validate with dbt Core, then publish to a configured dbt project.</p></div>
+        <div className="team-dashboard-actions"><button type="button" className="primary team-create-button" disabled={loading||Boolean(error)} onClick={()=>{setEditing(null);setCreating(true)}}><Plus size={15}/> Create Semantic Model</button>
         <button type="button" className="outline" disabled={loading} onClick={() => setGeneration(v => v + 1)}>
-          <RefreshCw size={15}/>{loading ? 'Loading...' : 'Refresh from GitHub'}
+          <RefreshCw size={15}/>{loading ? 'Loading...' : 'Refresh portal drafts'}
         </button></div>
       </div>
-      <div className="team-repository-line"><Database size={17}/><span>Source: <strong>{FEDERATED_REPO}</strong> · main · Approved CDO contracts from governance registry</span></div>
-      {loading && <div className="team-loading" role="status">Loading team-owned semantic models and approved CDO contracts…</div>}
-      {error && <div className="team-error" role="alert"><AlertCircle size={18}/>Unable to load GitHub semantic definitions: {error}. <button onClick={() => setGeneration(v => v + 1)}>Retry</button></div>}
-      {!loading && !error && !presentations.length && <div className="team-empty">No authored dbt semantic models were found in this team's GitHub folder.</div>}
+      <div className="team-repository-line"><Database size={17}/><span>Source: <strong>Python portal backend</strong> · dbt Core: {dbtStatus?.dbtCoreAvailable?'installed':'not detected'} · dbt project: {dbtStatus?.localProjectConfigured?'configured':'not configured'} · dbt Cloud Admin: {dbtStatus?.remoteAdminConfigured?'configured':'not configured'} · CDO contracts: approved registry</span></div>
+      {loading && <div className="team-loading" role="status">Loading portal drafts and approved CDO contracts…</div>}
+      {error && <div className="team-error" role="alert"><AlertCircle size={18}/>Unable to load portal models or CDO registry: {error}. <button onClick={() => setGeneration(v => v + 1)}>Retry</button></div>}
+      {!loading && !error && !models.length && <div className="team-empty">No portal-authored models yet. Create a staging and semantic model to get started.</div>}
+      {!loading && !error && models.length > 0 && <section className="team-detail-section">
+        <h3>Portal models and drafts <span>{models.length}</span></h3>
+        <div className="team-draft-list">
+          {models.map(draft=><div className="team-draft-row" key={draft.id}>
+            <div><strong>{draft.semanticName||draft.sourceModel||'Untitled draft'}</strong>
+              <small>{draft.status} · staging: {draft.sourceModel||'not set'}</small>
+            </div>
+            <button type="button" className="outline" onClick={()=>{setEditing(draft);setCreating(true)}}>Continue editing</button>
+          </div>)}
+        </div>
+      </section>}
       {!loading && !error && currentModel && <>
         <div className="team-model-picker"><label htmlFor="team-model-select">Team semantic model</label>
           <select id="team-model-select" value={currentModel.id} onChange={e => setSelectedId(e.target.value)}>
             {presentations.map(model => <option key={model.id} value={model.id}>{model.semanticName} — {model.modelName}</option>)}
           </select>
-          <span>{presentations.length} model{presentations.length === 1 ? '' : 's'} discovered</span>
+          <span>{presentations.length} model{presentations.length===1?'':'s'} with semantic YAML</span>
         </div>
         <ModelDetails model={currentModel}/>
       </>}
-      <p className="team-demo-note">Model discovery and PR authoring use GitHub; live dbt Cloud execution and server-side authorization are not connected yet. Role selection remains a prototype.</p>
+      <p className="team-demo-note">Team drafts are local to our Python backend; they are not read from or synchronized with federated-semantic-poc. Publishing writes to DBT_PROJECT_PATH only after dbt Core validation. Role selection remains a prototype, not production authentication.</p>
     </main>
   </div>
 }

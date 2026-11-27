@@ -15,12 +15,13 @@ import subprocess
 import tempfile
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlparse
+from . import team_portal, dbt_cloud
 
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("FAST_VALIDATE_PORT", "8765"))
 IDENTIFIER = re.compile(r"^[a-z][a-z0-9_]*$")
 TEAMS = {"team-a": "team_a", "team-c": "team_c"}
-FEDERATED_URL = "https://github.com/robin-bajaj/federated-semantic-poc.git"
 GOVERNANCE_URL = "https://github.com/robin-bajaj/cdo-semantic-governance.git"
 MAX_BODY = 128 * 1024
 MAX_OUTPUT = 12000
@@ -145,18 +146,20 @@ def validate_dbt(payload: object, *, runner=run_command) -> dict:
         root = Path(dirname)
         project, gov = root / "project", root / "governance"
         try:
-            runner("Checkout dbt project", ["git", "clone", "--quiet", "--depth", "1", "--branch", "main",
-                                           FEDERATED_URL, str(project)], root, timeout=45)
-            runner("Checkout CDO registry", ["git", "clone", "--quiet", "--depth", "1", "--branch", "main",
-                                            GOVERNANCE_URL, str(gov)], root, timeout=45)
-            steps.append({"name": "Load GitHub project and CDO registry", "status": "passed"})
+            source = team_portal.project_path()
+            if not source or not (source / "dbt_project.yml").is_file():
+                raise InputError("Set DBT_PROJECT_PATH to the actual target dbt project before dbt validation")
+            # Project files come only from the separately configured dbt project.
+            # No team files are loaded from or published to federated-semantic-poc.
+            shutil.copytree(source, project, ignore=shutil.ignore_patterns(".git", "target", "logs", ".venv", ".portal"))
+            steps.append({"name": "Load configured dbt project", "status": "passed"})
             yaml_path = (project / "models" / "semantic_models" / data["team"] / (data["semantic"] + ".yml")) if not data["stage_only"] else None
             sql_path = project / "models" / "staging" / data["team"] / (data["source"] + ".sql")
             if not data["stage_only"] and yaml_path.exists():
-                raise InputError(f"{yaml_path.name} already exists on main; create a new semantic model name")
+                raise InputError(f"{yaml_path.name} already exists in target dbt project; choose a new semantic model name")
             if data["mode"] == "new":
                 if sql_path.exists():
-                    raise InputError(f"{sql_path.name} already exists on main; choose another model name")
+                    raise InputError(f"{sql_path.name} already exists in target dbt project; choose another model name")
                 sql_path.parent.mkdir(parents=True, exist_ok=True)
                 sql_path.write_text(data["sql"], encoding="utf-8")
             elif not sql_path.is_file():
@@ -169,16 +172,40 @@ def validate_dbt(payload: object, *, runner=run_command) -> dict:
             (profiles / "profiles.yml").write_text(PROFILE, encoding="utf-8")
             steps.append({"name": "Apply unsaved staging SQL" if data["stage_only"] else "Apply unsaved SQL and semantic YAML", "status": "passed"})
             env = os.environ.copy()
-            env["PYTHONPATH"] = str(gov / "src") + os.pathsep + env.get("PYTHONPATH", "")
-            runner("CDO registry validation",
-                   [shutil.which("python3") or "python3", "-m", "cdo_governance.semantic.contract_registry",
-                    "--registry", str(gov / "contracts")], project, env=env)
-            steps.append({"name": "CDO registry validation", "status": "passed"})
-            runner("CDO inheritance compiler",
-                   [shutil.which("python3") or "python3", "-m", "cdo_governance.semantic.semantic_compiler",
-                    "--registry", str(gov / "contracts"), "--project", str(project),
-                    "--bindings-output", str(profiles / "cdo-resolved-bindings.yml")], project, env=env)
-            steps.append({"name": "CDO inheritance compiler", "status": "passed"})
+            # Resolve custom CDO inheritance only when the authored model opts in.
+            # The dbt deployment receives the compiled, native YAML.
+            if not data["stage_only"]:
+                import yaml
+                model = yaml.safe_load(data["yaml"])["models"][0]
+                meta = (model.get("config") or {}).get("meta") or {}
+                if "uses" in meta or "cdo" in meta or "semantic_inheritance" in meta:
+                    governance_path = os.environ.get("CDO_GOVERNANCE_PATH")
+                    if governance_path:
+                        gov = Path(governance_path).expanduser().resolve()
+                        if not (gov / "contracts").is_dir() or not (gov / "src").is_dir():
+                            raise InputError("CDO_GOVERNANCE_PATH must contain contracts/ and src/")
+                    else:
+                        runner("Load approved CDO contracts",
+                               ["git", "clone", "--quiet", "--depth", "1", "--branch", "main",
+                                GOVERNANCE_URL, str(gov)], root, timeout=45)
+                    env["PYTHONPATH"] = str(gov / "src") + os.pathsep + env.get("PYTHONPATH", "")
+                    runner("CDO registry validation",
+                           [shutil.which("python3") or "python3", "-m", "cdo_governance.semantic.contract_registry",
+                            "--registry", str(gov / "contracts")], project, env=env)
+                    steps.append({"name": "CDO registry validation", "status": "passed"})
+                    runner("CDO inheritance compiler",
+                           [shutil.which("python3") or "python3", "-m", "cdo_governance.semantic.semantic_compiler",
+                            "--registry", str(gov / "contracts"), "--project", str(project),
+                            "--bindings-output", str(profiles / "cdo-resolved-bindings.yml")], project, env=env)
+                    steps.append({"name": "CDO inheritance compiler", "status": "passed"})
+            # Match the actual profile specified in dbt_project.yml.
+            import yaml
+            project_settings = yaml.safe_load((project / "dbt_project.yml").read_text(encoding="utf-8")) or {}
+            profile_name = project_settings.get("profile") or project_settings.get("name") or "default"
+            if not isinstance(profile_name, str) or not re.fullmatch(r"[a-zA-Z_][a-zA-Z_0-9-]*", profile_name):
+                raise InputError("Invalid dbt profile identifier")
+            (profiles / "profiles.yml").write_text(
+                PROFILE.replace("default:", f"{profile_name}:", 1), encoding="utf-8")
             # A dummy profile is sufficient for parsing without a warehouse connection.
             dbt = shutil.which("dbt")
             if not dbt:
@@ -190,7 +217,8 @@ def validate_dbt(payload: object, *, runner=run_command) -> dict:
             if not (project / "target" / "manifest.json").is_file():
                 raise StepFailure("dbt Core parse", "dbt parse completed without a manifest.json")
             return {"ok": True, "steps": steps, "log": output, "mode": "parse-only",
-                    "scope": "staging" if data["stage_only"] else "full-draft"}
+                    "scope": "staging" if data["stage_only"] else "full-draft",
+                    "compiledYaml": yaml_path.read_text(encoding="utf-8") if yaml_path else None}
         except StepFailure as exc:
             steps.append({"name": exc.step, "status": "failed"})
             return {"ok": False, "steps": steps, "log": exc.output, "error": f"{exc.step} failed", "mode": "parse-only"}
@@ -200,8 +228,14 @@ def validate_dbt(payload: object, *, runner=run_command) -> dict:
 
 
 class Handler(BaseHTTPRequestHandler):
+    """Loopback-only POC gateway: portal drafts, dbt Core, dbt Cloud metadata."""
+
     def do_POST(self):
-        if self.path not in ("/api/validate/fast", "/api/validate/staging"):
+        path = urlparse(self.path).path
+        allowed = {"/api/validate/fast", "/api/validate/staging",
+                   "/api/team-models/save", "/api/team-models/validate",
+                   "/api/team-models/publish", "/api/dbt/jobs/run"}
+        if path not in allowed:
             self.send_error(404)
             return
         try:
@@ -209,36 +243,88 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             count = 0
         if count <= 0 or count > MAX_BODY:
-            self.send_error(413, "Invalid request size")
+            self.send_json(413, {"ok": False, "error": "Invalid request size"})
             return
         try:
             payload = json.loads(self.rfile.read(count))
-            if self.path == "/api/validate/staging":
-                if not isinstance(payload, dict):
-                    raise ValueError("Expected object")
-                payload["validationScope"] = "staging"
+            if not isinstance(payload, dict):
+                raise ValueError("Expected JSON object")
         except (ValueError, UnicodeError):
-            self.send_error(400, "Invalid JSON")
+            self.send_json(400, {"ok": False, "error": "Invalid JSON"})
             return
-        if not SLOTS.acquire(blocking=False):
-            self.send_json(429, {"ok": False, "error": "Validation service busy; retry shortly"})
+        validation = path in ("/api/validate/fast", "/api/validate/staging", "/api/team-models/validate")
+        if validation and not SLOTS.acquire(blocking=False):
+            self.send_json(429, {"ok": False, "error": "Validation busy; retry shortly"})
             return
         try:
-            try:
+            if path == "/api/team-models/save":
+                self.send_json(200, {"ok": True, "draft": team_portal.save_draft(payload)})
+            elif path == "/api/team-models/publish":
+                result = team_portal.publish_draft(payload.get("id", ""))
+                self.send_json(200, {"ok": True, **result})
+            elif path == "/api/team-models/validate":
+                draft = team_portal.load_draft(payload.get("id", ""))
+                data = team_portal.validate_input(draft)
+                result = validate_dbt(data)
+                if result.get("ok"):
+                    result["draft"] = team_portal.mark_validated(draft["id"], result)
+                self.send_json(200 if result["ok"] else 422, result)
+            elif path in ("/api/validate/fast", "/api/validate/staging"):
+                if path == "/api/validate/staging":
+                    payload["validationScope"] = "staging"
                 result = validate_dbt(payload)
                 self.send_json(200 if result["ok"] else 422, result)
-            except InputError as exc:
-                self.send_json(400, {"ok": False, "error": str(exc), "steps": []})
-            except Exception:
-                self.send_json(500, {"ok": False, "error": "Backend validation failed unexpectedly", "steps": []})
+            elif path == "/api/dbt/jobs/run":
+                if os.environ.get("DBT_CLOUD_ENABLE_RUNS") != "1":
+                    raise team_portal.PortalError("Remote job triggers are disabled; set DBT_CLOUD_ENABLE_RUNS=1 explicitly", 403)
+                self.send_json(200, {"ok": True, "remote": True,
+                                     "result": dbt_cloud.trigger_configured_job()})
+        except team_portal.PortalError as exc:
+            self.send_json(exc.status, {"ok": False, "error": str(exc)})
+        except InputError as exc:
+            self.send_json(400, {"ok": False, "error": str(exc)})
+        except dbt_cloud.DbtCloudError as exc:
+            self.send_json(502, {"ok": False, "error": str(exc)})
+        except Exception:
+            self.send_json(500, {"ok": False, "error": "Backend operation failed"})
         finally:
-            SLOTS.release()
+            if validation:
+                SLOTS.release()
 
     def do_GET(self):
-        if self.path == "/api/health":
-            self.send_json(200, {"status": "ready", "engine": "dbt-core"})
-        else:
-            self.send_error(404)
+        parsed = urlparse(self.path)
+        path = parsed.path
+        try:
+            if path == "/api/health":
+                self.send_json(200, {"status": "ready", "engine": "dbt-core",
+                                     "projectConfigured": bool(team_portal.project_path())})
+            elif path == "/api/dbt/status":
+                project = team_portal.project_path()
+                self.send_json(200, {
+                    "dbtCoreAvailable": bool(shutil.which("dbt")),
+                    "localProjectConfigured": bool(project and (project / "dbt_project.yml").is_file()),
+                    "remoteAdminConfigured": dbt_cloud.configured(),
+                    "remoteRunsEnabled": os.environ.get("DBT_CLOUD_ENABLE_RUNS") == "1",
+                    "publishingMode": "local-dbt-project-only",
+                })
+            elif path == "/api/team-models":
+                role = parse_qs(parsed.query).get("role", [""])[0]
+                self.send_json(200, {"models": team_portal.list_drafts(role)})
+            elif path == "/api/team-models/sources":
+                role = parse_qs(parsed.query).get("role", [""])[0]
+                self.send_json(200, {"sources": team_portal.source_models(role)})
+            elif path == "/api/dbt/jobs":
+                self.send_json(200, {"ok": True, "result": dbt_cloud.jobs()})
+            elif path.startswith("/api/dbt/runs/"):
+                self.send_json(200, {"ok": True, "result": dbt_cloud.run_status(path.rsplit("/", 1)[-1])})
+            else:
+                self.send_error(404)
+        except team_portal.PortalError as exc:
+            self.send_json(exc.status, {"ok": False, "error": str(exc)})
+        except dbt_cloud.DbtCloudError as exc:
+            self.send_json(502, {"ok": False, "error": str(exc)})
+        except Exception:
+            self.send_json(500, {"ok": False, "error": "Backend operation failed"})
 
     def send_json(self, status, payload):
         body = json.dumps(payload).encode("utf-8")
@@ -250,7 +336,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def log_message(self, format, *args):
-        # Never log submitted SQL/YAML or tokens.
+        # Never log submitted SQL/YAML or access tokens.
         return
 
 

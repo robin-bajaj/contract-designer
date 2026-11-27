@@ -1,3 +1,75 @@
+# Semantic Governance Portal — current Team A/C workflow (portal-first)
+
+> **Current design supersedes the earlier GitHub/federated team-model workflow described later in this README.**
+> **No Team A/C models are read from or synchronized with `robin-bajaj/federated-semantic-poc`.**
+> That repository is untouched by the new portal.
+
+The CDO workspace still reads approved contracts from `cdo-semantic-governance/main`. Team A and Team C create staging SQL and semantic definitions in the portal and can explicitly adopt CDO contracts. The new Python backend owns the draft lifecycle:
+
+1. **Save Portal Draft** — write the current editor state, authored YAML and SQL to a local SQLite store (`PORTAL_DB_PATH`). Incomplete drafts can be resumed.
+2. **Validate with dbt Core** — copy the separately configured target dbt project into a disposable folder, overlay the unsaved model files, expand the CDO inheritance metadata through the existing CDO Python compiler (only when a contract is selected), then run `dbt parse --no-partial-parse`. No committed files or GitHub PR are required.
+3. **Publish to dbt Project** — only after a successful validation of the **exact same revision**; write the staging SQL (if new) and the **compiled native dbt semantic YAML** to `DBT_PROJECT_PATH`. The authored custom CDO YAML remains stored in the portal database. The publisher rejects existing paths rather than overwriting models.
+4. **Optional dbt Cloud Admin API** — Python server-side adapter supports listing jobs, reading run status and (only when explicitly enabled) triggering a preconfigured job against the **existing remote project revision**. Admin API job execution **does not upload local model files**.
+
+## Local setup for this workflow
+
+Python 3.12 and Node.js are required. Run:
+
+```bash
+npm ci
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r server/requirements.txt
+```
+
+Use a **separate dbt project directory**, not the previous `federated-semantic-poc`, with a valid `dbt_project.yml` and appropriate team groups and dbt model dependencies. For example:
+
+```bash
+# Replace this path with YOUR new dedicated dbt project root
+export DBT_PROJECT_PATH="$HOME/projects/semantic-portal-dbt"
+# Optional: local checked-out CDO repo; otherwise the backend fetches approved governance main
+export CDO_GOVERNANCE_PATH="$HOME/projects/cdo-semantic-governance"
+export PORTAL_DB_PATH=".portal/models.sqlite3"
+npm run dev:api
+```
+
+In a second terminal: `npm run dev`. Vite forwards `/api` to Python at `127.0.0.1:8765`.
+
+**Environment configuration is mandatory for dbt Core validation and publication.** The portal can save drafts without it, but it must not claim dbt validation succeeded without an actual dbt Core parse against the target project. The backend does not require Neon access for parse-only checks; actual SQL execution and enforced warehouse column types still require `dbt build` against a development warehouse.
+
+### Optional dbt Cloud administrative API
+
+Set the following **on the Python backend only** (never in Vite or React):
+
+```bash
+export DBT_CLOUD_HOST="cloud.getdbt.com"     # Or your dbt account hostname
+export DBT_CLOUD_ACCOUNT_ID="12345"
+export DBT_CLOUD_TOKEN="YOUR_SERVER_SIDE_SERVICE_TOKEN"
+export DBT_CLOUD_JOB_ID="56789"              # Existing job you are authorized to run
+# export DBT_CLOUD_ENABLE_RUNS=1              # Explicitly unlock remote job triggering
+```
+
+Backend endpoints:
+
+| Endpoint | Description |
+| --- | --- |
+| `GET /api/dbt/status` | Shows whether dbt Core, target project and Cloud Admin API are configured |
+| `GET /api/team-models?role=team-a` | Lists **portal-owned** team model drafts |
+| `GET /api/team-models/sources?role=team-a` | Lists sources in the configured dbt project |
+| `POST /api/team-models/save` | Stores a portal draft |
+| `POST /api/team-models/validate` | Validates saved revision through dbt Core and CDO compiler |
+| `POST /api/team-models/publish` | Writes validated native model files into the configured local dbt project |
+| `POST /api/validate/staging` | Debounced staging parse for the live SQL editor |
+| `GET /api/dbt/jobs` | Calls dbt Administrative API jobs endpoint through Python |
+| `GET /api/dbt/runs/{id}` | Calls dbt Administrative API run details through Python |
+| `POST /api/dbt/jobs/run` | Triggers the preconfigured remote job only if `DBT_CLOUD_ENABLE_RUNS=1` |
+
+The dbt platform introduced public Studio IDE file-operation endpoints in June 2026. A **future remote publisher** can use those endpoints once the intended environment and credentials are configured and its request contract tested. This PR intentionally does **not** pretend that writing to a local dbt project publishes to the remote Studio IDE or deploys a production run.
+
+**Security boundary:** This is a **loopback-only POC**, not production backend authorization. The app still uses selectable demo roles, and dbt can execute Python/Jinja macros. Do not expose its API to public networks or untrusted users. Production will need SSO/RBAC enforced by the Python service, authenticated requests, isolated validation workers with restricted filesystem/network access, quotas, project-scoped credentials, and an approval-based publishing mechanism.
+
+---
+
 # Contract Designer
 
 Visual editor for versioned logical CDO contracts. The authoritative catalog is `robin-bajaj/cdo-semantic-governance/contracts/` on `main`; unpublished edits never enter the catalog before review and merge.

@@ -1,12 +1,11 @@
 import React, { useMemo, useState } from 'react'
-import { ArrowLeft, CheckCircle2, Download, GitPullRequest, Plus, Trash2, PlayCircle, AlertCircle } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Download, Save, Rocket, Plus, Trash2, PlayCircle, AlertCircle } from 'lucide-react'
 import {
   createEmptyTeamModel, chooseContract, availableContracts, validateTeamDraft,
   buildTeamModelDocument, toTeamModelYaml, teamModelPath,
 } from '../../domain/semantics/teamModelAuthoring.js'
 import { DATA_TYPES, SIMPLE_AGGREGATIONS } from '../../domain/contracts/dbtOptions.js'
-import { publishTeamModelPR } from '../../services/github/teamModelPublish.js'
-import { fastValidateTeamModel } from '../../services/validation/dbtCoreValidation.js'
+import { savePortalDraft, validatePortalDraft, publishPortalDraft } from '../../services/portal/teamPortalApi.js'
 import LiveStagingStatus from './LiveStagingStatus.jsx'
 import './TeamModelEditor.css'
 
@@ -17,9 +16,11 @@ const downloadYaml=(name,text)=>{
   el.href=url;el.download=name;el.click();URL.revokeObjectURL(url)
 }
 
-export default function TeamModelEditor({role,contracts,sourceModels,onBack}) {
-  const [draft,setDraft]=useState(()=>createEmptyTeamModel(role))
-  const [token,setToken]=useState('')
+export default function TeamModelEditor({role,contracts,sourceModels,onBack,initialDraft=null}) {
+  const [draft,setDraft]=useState(()=>initialDraft?.draftData && Object.keys(initialDraft.draftData).length ? initialDraft.draftData : createEmptyTeamModel(role))
+  const [saved,setSaved]=useState(initialDraft)
+  const [validatedSignature,setValidatedSignature]=useState(initialDraft?.status==='validated'?null:null)
+  const [saving,setSaving]=useState(false)
   const [publishing,setPublishing]=useState(false)
   const [result,setResult]=useState(null)
   const [error,setError]=useState('')
@@ -39,44 +40,66 @@ export default function TeamModelEditor({role,contracts,sourceModels,onBack}) {
   const addList=(key,item)=>setField(key,[...draft[key],item])
   const removeList=(key,index)=>setField(key,draft[key].filter((_,i)=>i!==index))
   const setContract=key=>{
-    try{setDraft(current=>chooseContract(current,key,contracts));setError('');setResult(null)}
+    try{setDraft(current=>chooseContract(current,key,contracts));setError('');setResult(null);setValidatedSignature(null)}
     catch(err){setError(err.message)}
+  }
+  const snapshot=JSON.stringify([role,draft.sourceModel,draft.semanticName,draft.sourceMode,draft.sourceSql,generated])
+  const draftPayload=()=>({
+    id:saved?.id,role,sourceModel:draft.sourceModel,semanticName:draft.semanticName,
+    sourceMode:draft.sourceMode,sourceSql:draft.sourceMode==='new'?draft.sourceSql:null,
+    yamlText:generated,draftData:draft,
+  })
+  const saveDraft=async()=>{
+    setError('')
+    setSaving(true)
+    try{
+      const result=await savePortalDraft(draftPayload())
+      setSaved(result)
+      setResult(null)
+      return result
+    }catch(err){setError(err.message);return null}
+    finally{setSaving(false)}
   }
   const validateStaging=async()=>{
     setError('')
     setValidationResult(null)
-    if(issues.length || !generated) {setError('Resolve local structural issues before running dbt Core.');return}
+    if(issues.length||!generated){
+      setError('Complete the semantic model and resolve local issues before dbt Core validation.')
+      return
+    }
     setValidating(true)
-    const signature=JSON.stringify([role,draft.sourceModel,draft.semanticName,draft.sourceMode,draft.sourceSql,generated])
-    try {
-      const response=await fastValidateTeamModel({
-        role,sourceModel:draft.sourceModel,semanticName:draft.semanticName,
-        sourceMode:draft.sourceMode,sourceSql:draft.sourceSql,yamlText:generated,
-      })
-      setValidationResult({ ...response,signature })
-    } catch(err) {setValidationResult({ok:false,error:err.message,steps:[],log:'',signature})}
-    finally {setValidating(false)}
+    try{
+      const current=await savePortalDraft(draftPayload())
+      setSaved(current)
+      const response=await validatePortalDraft(current.id)
+      setValidationResult(response)
+      if(response.ok) {
+        setValidatedSignature(snapshot)
+        setSaved(response.draft)
+      }else setValidatedSignature(null)
+    }catch(err){
+      setValidationResult({ok:false,error:err.message,steps:[],log:''})
+      setValidatedSignature(null)
+    }finally{setValidating(false)}
   }
   const publish=async()=>{
-    setError('');setResult(null)
-    if(issues.length){setError(issues.join(' · '));return}
-    if(!token.trim()){setError('Enter a fine-grained GitHub token with Contents and Pull requests read/write on federated-semantic-poc.');return}
+    if(!saved?.id||validatedSignature!==snapshot){
+      setError('Run successful dbt Core validation for this exact draft before publishing.')
+      return
+    }
     setPublishing(true)
+    setError('')
     try{
-      const pr=await publishTeamModelPR({
-        role,semanticName:draft.semanticName,yamlText:generated,
-        sourceModel:draft.sourceModel,
-        sourceSql:draft.sourceMode==='new'?draft.sourceSql:null,
-        token,
-      })
-      setResult(pr)
+      const output=await publishPortalDraft(saved.id)
+      setResult(output)
+      setSaved({...saved,status:'published'})
     }catch(err){setError(err.message)}
     finally{setPublishing(false)}
   }
   return <div className="team-editor">
     <div className="team-editor-heading">
       <button type="button" className="outline" onClick={onBack}><ArrowLeft size={15}/> Back to models</button>
-      <div><span className="team-label">NEW SEMANTIC IMPLEMENTATION</span><h2>Create a team semantic model</h2><p>Author SQL and model properties without editing CDO-owned definitions. Proposed changes go through a pull request.</p></div>
+      <div><span className="team-label">NEW SEMANTIC IMPLEMENTATION</span><h2>Create a team semantic model</h2><p>Create staging SQL, inherit governed CDO definitions and validate with dbt Core in our Python backend.</p></div>
     </div>
 
     <div className="team-editor-form team-editor-split-layout">
@@ -103,7 +126,7 @@ export default function TeamModelEditor({role,contracts,sourceModels,onBack}) {
               placeholder={`select\n  position_id,\n  report_date,\n  profit_loss,\n  instrument_code\nfrom {{ ref('stg_${role==='team-a'?'team_a':'team_c'}_positions') }}`}/>
           </label>
           <LiveStagingStatus role={role} sourceModel={draft.sourceModel} sourceSql={draft.sourceSql}/>
-          <p className="team-editor-note">New source SQL will be reviewed through GitHub and compiled by dbt CI. Its physical columns must match your declared contract fields.</p>
+          <p className="team-editor-note">Your SQL is stored as a portal draft. Validation runs against the configured dbt project; dbt parse does not execute SQL.</p>
         </>}
       </section>
 
@@ -177,19 +200,18 @@ export default function TeamModelEditor({role,contracts,sourceModels,onBack}) {
         </tbody></table></div>
       </section>
       <section>
-        <h3>6. Validate and propose through GitHub</h3>
+        <h3>6. Save, validate and publish to dbt</h3>
         {issues.length?<div className="team-validation-errors"><strong>Resolve these before publishing:</strong><ul>{issues.map((issue,i)=><li key={i}>{issue}</li>)}</ul></div>
           : <p className="team-validation-ok"><CheckCircle2 size={16}/> Local structural checks passed. dbt CI remains authoritative.</p>}
-        <label>Fine-grained GitHub token (not stored)
-          <input type="password" autoComplete="off" value={token} onChange={e=>setToken(e.target.value)} placeholder="Token with Contents and Pull requests read/write"/>
-        </label>
+        <p className="team-editor-note">Portal drafts are stored in the local Python backend, not GitHub. Publishing requires successful dbt Core validation and a configured DBT_PROJECT_PATH.</p>
         <div className="team-editor-buttons">
+          <button type="button" className="outline" disabled={saving||validating} onClick={saveDraft}><Save size={15}/>{saving?'Saving…':'Save Portal Draft'}</button>
           <button type="button" className="outline" disabled={!generated||validating} onClick={validateStaging}>
-            <PlayCircle size={15}/>{validating?'Validating in dbt Core…':'Validate Staging (dbt Core)'}
+            <PlayCircle size={15}/>{validating?'Validating in dbt Core…':'Validate with dbt Core'}
           </button>
           <button type="button" className="outline" disabled={!generated} onClick={()=>downloadYaml(`${draft.semanticName}.yml`,generated)}><Download size={15}/> Download YAML</button>
-          <button type="button" className="primary" disabled={issues.length>0||publishing||!token.trim()} onClick={publish}>
-            <GitPullRequest size={15}/>{publishing?'Creating PR…':'Save to GitHub (PR)'}
+          <button type="button" className="primary" disabled={publishing||!saved?.id||validatedSignature!==snapshot} onClick={publish}>
+            <Rocket size={15}/>{publishing?'Publishing…':'Publish to dbt Project'}
           </button>
         </div>
         {validationResult && <div className={`team-dbt-results ${validationResult.ok?'passed':'failed'}`} role="status">
@@ -203,9 +225,10 @@ export default function TeamModelEditor({role,contracts,sourceModels,onBack}) {
           {validationResult.log && <details><summary>dbt / compiler output</summary><pre>{validationResult.log}</pre></details>}
           <small>Parse-only: does not execute SQL, inspect Neon columns, or enforce physical database contracts.</small>
         </div>}
+        {saved?.id && <p className="team-validation-ok"><Save size={14}/> Draft stored in Python backend · {saved.status}</p>}
         {error && <p className="team-editor-error" role="alert">{error}</p>}
-        {result && <p className="team-editor-success"><CheckCircle2 size={15}/> PR #{result.number} created. <a href={result.url} target="_blank" rel="noopener noreferrer">Open for review</a></p>}
-        <p className="team-editor-note">The PR targets federated-semantic-poc/main. It does not run dbt Cloud immediately or deploy your model. CI validates the compiled project.</p>
+        {result && <p className="team-editor-success"><CheckCircle2 size={15}/> {result.message} · {result.paths?.join(', ')}</p>}
+        <p className="team-editor-note">Publishing writes native compiled YAML and staging SQL only to the configured local dbt project. It does not push Git changes or deploy to remote dbt Studio automatically.</p>
       </section>
       </div>
       <aside className="team-yaml-preview" aria-label="Live dbt YAML preview">
