@@ -45,6 +45,8 @@ The Python backend creates and reuses:
     dbt_project.yml                 # Generated, preserved across restarts
     models/
       groups.yml                    # Team A + Team C dbt groups
+      time_spine_daily.sql          # Managed day-granularity time spine
+      time_spine.yml                # MetricFlow semantic-time metadata
       staging/team_a/
       staging/team_c/
       semantic_models/team_a/
@@ -73,7 +75,9 @@ require a warehouse-backed run or build, which is not enabled in this flow.
 The backend creates a disposable *copy* for validation, so failed or partial drafts
 never enter the managed project. Publication writes new files only after successful
 revision-matched validation. Both teams share one project but use distinct
-`team_a` and `team_c` model folders.
+`team_a` and `team_c` model folders. The backend also creates a daily time spine
+required by the dbt Semantic Layer, so users do not need to know about it.
+The time spine is defined for the PostgreSQL adapter used by this POC.
 
 ### Security
 
