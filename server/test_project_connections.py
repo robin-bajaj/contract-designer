@@ -28,7 +28,10 @@ def github(path):
     if path.endswith("/branches/main"):
         return {"commit":{"sha":SHA,"commit":{"tree":{"sha":TREE_SHA}}}}
     if path.endswith("/git/trees/"+TREE_SHA+"?recursive=1"):
-        return {"tree":[{"type":"blob","path":p} for p in (STAGE_A,FILE_A,FILE_C)]}
+        return {"tree":[{"type":"blob","path":p} for p in
+                        (STAGE_A, FILE_A, FILE_C, "dbt_project.yml",
+                         "macros/date_helpers.sql", "seeds/products.csv",
+                         "tests/assert_positions.sql", "secrets/credentials.yml")]}
     if "/contents/" in path:
         raw = ("version: 2\nmodels:\n  - name: a\n    config:\n      meta:\n        uses:\n          name: cdo.position\n          version: 1\n    semantic_model:\n      name: team_a\n" if FILE_A in path
                else "select 1 as position_id" if STAGE_A in path else "not: [valid")
@@ -83,7 +86,13 @@ class TeamLeadConnectionTests(unittest.TestCase):
         self.assertEqual(catalog["sources"],["stg_team_a_positions"])
         self.assertEqual(catalog["models"][0]["contract"]["name"],"cdo.position")
         self.assertIn("select 1",pc.model_file("team-a",STAGE_A)["content"])
-        for file in (FILE_C,"secrets/credentials.yml","../models/staging/team_a/x.sql"):
+        self.assertIn(FILE_C, catalog["files"])
+        for path in ("dbt_project.yml", "macros/date_helpers.sql",
+                     "seeds/products.csv", "tests/assert_positions.sql"):
+            self.assertIn(path, catalog["files"])
+        self.assertNotIn("secrets/credentials.yml", catalog["files"])
+        self.assertTrue(pc.model_file("team-a", FILE_C)["content"])
+        for file in ("secrets/credentials.yml","../models/staging/team_a/x.sql"):
             with self.assertRaises(team_portal.PortalError):
                 pc.model_file("team-a",file)
         self.assertNotIn(TOKEN,repr(catalog))
