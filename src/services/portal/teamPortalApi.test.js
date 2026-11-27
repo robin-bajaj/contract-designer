@@ -39,3 +39,12 @@ test('backend errors are surfaced to editor',async()=>{
   const broken=async()=>({ok:false,status:409,json:async()=>({error:'Validate this draft first'})})
   await assert.rejects(publishPortalDraft('id',broken),/Validate this draft first/)
 })
+
+test('dbt validation failures return compiler steps and logs for inline diagnostics',async()=>{
+  const response={ok:false,error:'CDO inheritance compiler failed',log:'unknown attribute',
+    steps:[{name:'CDO inheritance compiler',status:'failed'}]}
+  const output=await validatePortalDraft('draft-1',async()=>({
+    ok:false,status:422,json:async()=>response,
+  }))
+  assert.deepEqual(output,response)
+})
