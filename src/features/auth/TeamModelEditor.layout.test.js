@@ -31,3 +31,11 @@ test('team YAML right column stays visible and scrollable on desktop, stacks bel
   assert.match(css,/\.team-editor-split-layout>\.team-yaml-preview pre\{/)
   assert.match(css,/max-height:420px/)
 })
+
+test('team editing UI uses compact controls and a smaller sticky preview',()=>{
+  assert.match(css,/\.team-editor\{padding:20px 22px 48px\}/)
+  assert.match(css,/\.team-editor-fields>section\{padding:16px 18px/)
+  assert.match(css,/\.team-editor-fields h3\{font-size:15px/)
+  assert.match(css,/height:min\(68dvh,690px\)/)
+  assert.match(css,/min-height:34px/)
+})
