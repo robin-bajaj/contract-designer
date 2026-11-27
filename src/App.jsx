@@ -143,7 +143,6 @@ function App() {
         {notice && <div className="notice"><CircleAlert size={16}/><span>{notice}</span><button className="icon-quiet" onClick={() => setNotice('')}><X size={15}/></button></div>}
         {view === 'canvas' ? <>
           <div className="page-head"><h1>My Contracts</h1></div>
-          <p className="muted">Left-drag the canvas to pan or move contracts. Right-click or double-click a contract for options; press Esc to dismiss.</p>
           <div className="graph-area"><ContractCanvas contracts={cards} onOpen={open} onCreateStandalone={() => addContract(false)} onCreateChild={parent => addContract(true, parent)}/></div>
         </> : active ? <ContractEditor
           active={active} contracts={contracts} selectedYaml={selectedYaml}
