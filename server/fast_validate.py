@@ -16,7 +16,7 @@ import tempfile
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
-from . import team_portal, dbt_cloud
+from . import team_portal, dbt_cloud, project_connections
 
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("FAST_VALIDATE_PORT", "8765"))
@@ -252,7 +252,8 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         allowed = {"/api/validate/fast", "/api/validate/staging",
                    "/api/team-models/save", "/api/team-models/validate",
-                   "/api/team-models/publish", "/api/dbt/jobs/run"}
+                   "/api/team-models/publish", "/api/dbt/jobs/run",
+                   "/api/admin/project-connections"}
         if path not in allowed:
             self.send_error(404)
             return
@@ -275,7 +276,12 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(429, {"ok": False, "error": "Validation busy; retry shortly"})
             return
         try:
-            if path == "/api/team-models/save":
+            if path == "/api/admin/project-connections":
+                project_connections.require_admin(self.headers.get("X-Portal-Admin-Key"))
+                saved = project_connections.assign(payload.get("role"),
+                       payload.get("projectId"), payload.get("environmentId"))
+                self.send_json(200, {"ok": True, "connection": saved})
+            elif path == "/api/team-models/save":
                 self.send_json(200, {"ok": True, "draft": team_portal.save_draft(payload)})
             elif path == "/api/team-models/publish":
                 result = team_portal.publish_draft(payload.get("id", ""))
@@ -326,8 +332,30 @@ class Handler(BaseHTTPRequestHandler):
                     "dbtCoreAvailable": bool(shutil.which("dbt")),
                     "localProjectConfigured": True,
                     "remoteAdminConfigured": dbt_cloud.configured(),
+                    "projectConnectionAvailable": dbt_cloud.configured(),
                     "remoteRunsEnabled": os.environ.get("DBT_CLOUD_ENABLE_RUNS") == "1",
                 })
+            elif path == "/api/admin/project-connections/projects":
+                project_connections.require_admin(self.headers.get("X-Portal-Admin-Key"))
+                self.send_json(200, {"projects": project_connections.project_choices(),
+                                     "connections": project_connections.all_connections()})
+            elif path == "/api/admin/project-connections/preview":
+                project_connections.require_admin(self.headers.get("X-Portal-Admin-Key"))
+                project_id = parse_qs(parsed.query).get("projectId", [""])[0]
+                if not project_id.isdigit():
+                    raise team_portal.PortalError("Select a valid dbt project", 400)
+                self.send_json(200, {"project": project_connections.project_preview(int(project_id))})
+            elif path == "/api/team-models/connected":
+                role = parse_qs(parsed.query).get("role", [""])[0]
+                self.send_json(200, project_connections.inventory(role))
+            elif path == "/api/team-models/file":
+                query = parse_qs(parsed.query)
+                role = query.get("role", [""])[0]
+                file_path = query.get("path", [""])[0]
+                self.send_json(200, project_connections.model_file(role, file_path))
+            elif path == "/api/project-connections":
+                role = parse_qs(parsed.query).get("role", [""])[0]
+                self.send_json(200, {"connection": project_connections.connection_for(role)})
             elif path == "/api/team-models":
                 role = parse_qs(parsed.query).get("role", [""])[0]
                 self.send_json(200, {"models": team_portal.list_drafts(role)})
