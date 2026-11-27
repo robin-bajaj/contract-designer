@@ -63,3 +63,30 @@ export function lineageEdges(contracts, positions) {
       path: `M ${startX} ${startY} C ${startX} ${startY + bend} ${endX} ${endY - bend} ${endX} ${endY}` }]
   })
 }
+
+
+/**
+ * Draw connections in viewport pixel coordinates using measured DOM rectangles,
+ * not predicted card positions. This keeps arrows visually attached after
+ * CSS transforms, drag overrides, panning and responsive layout changes.
+ */
+export function lineageEdgesFromRects(contracts, cardRects, viewportRect) {
+  const byKey = new Map(contracts.map(c => [contractKey(c), c]))
+  return contracts.flatMap(child => {
+    if (!child.uses) return []
+    const parent = findParent(byKey, child)
+    const a = parent && cardRects[parent.id]
+    const b = cardRects[child.id]
+    if (!a || !b) return []
+    const startX = a.left - viewportRect.left + a.width / 2
+    const startY = a.bottom - viewportRect.top
+    const endX = b.left - viewportRect.left + b.width / 2
+    const endY = b.top - viewportRect.top - 7
+    const delta = endY - startY
+    const bend = Math.max(24, Math.abs(delta) / 2) * (delta >= 0 ? 1 : -1)
+    return [{
+      id: `${parent.id}->${child.id}`, from: parent.id, to: child.id,
+      path: `M ${startX} ${startY} C ${startX} ${startY + bend} ${endX} ${endY - bend} ${endX} ${endY}`,
+    }]
+  })
+}

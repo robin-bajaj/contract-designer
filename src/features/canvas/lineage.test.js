@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createLineageLayout, lineageEdges, NODE_HEIGHT } from './lineage.js'
+import { createLineageLayout, lineageEdges, lineageEdgesFromRects, NODE_HEIGHT } from './lineage.js'
 
 const sample = [
   { id: 'all', name: 'cdo.all', version: 1 },
@@ -82,4 +82,38 @@ test('two siblings each connect to the same version-pinned parent anchor', () =>
   const edges=lineageEdges(contracts,positions)
   assert.equal(edges.length,2)
   for (const edge of edges) assert.match(edge.path,/^M 111 170 C 111 /)
+})
+
+test('screen-space connectors attach to real card boxes after arbitrary drags',()=>{
+  const contracts=[
+    {id:'all-v1',name:'cdo.all',version:1},
+    {id:'all-v2',name:'cdo.all',version:2},
+    {id:'child',name:'cdo.position',version:1,uses:{name:'cdo.all',version:1}},
+  ]
+  const viewport={left:300,top:100}
+  const cardRects={
+    'all-v1':{left:530,top:620,width:202,height:150,bottom:770},
+    'all-v2':{left:1230,top:300,width:202,height:150,bottom:450},
+    child:{left:955,top:580,width:202,height:150,bottom:730},
+  }
+  const edges=lineageEdgesFromRects(contracts,cardRects,viewport)
+  assert.equal(edges.length,1)
+  assert.equal(edges[0].from,'all-v1')
+  assert.equal(edges[0].to,'child')
+  assert.ok(edges[0].path.startsWith('M 331 670 C 331 '),edges[0].path)
+  assert.ok(edges[0].path.endsWith('756 473'),edges[0].path)
+})
+
+test('a repositioned parent changes the screen-space source anchor without stale layout',()=>{
+  const contracts=[
+    {id:'root',name:'cdo.all',version:1},
+    {id:'child',name:'cdo.counterparty',version:1,uses:{name:'cdo.all',version:1}},
+  ]
+  const viewport={left:0,top:0}
+  const rects={root:{left:20,top:40,width:202,height:150,bottom:190},child:{left:300,top:400,width:202,height:150,bottom:550}}
+  const before=lineageEdgesFromRects(contracts,rects,viewport)[0].path
+  rects.root={...rects.root,left:470,bottom:190}
+  const after=lineageEdgesFromRects(contracts,rects,viewport)[0].path
+  assert.ok(before.startsWith('M 121 190'))
+  assert.ok(after.startsWith('M 571 190'))
 })

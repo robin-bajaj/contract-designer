@@ -140,3 +140,7 @@
 }
 .canvas-toolbar .zoom-level[data-tooltip]{display:inline-flex;align-items:center;justify-content:center;min-height:30px}
 .canvas-toolbar .zoom-level[data-tooltip]:focus-visible{outline:2px solid #259768;outline-offset:2px;border-radius:3px}
+
+/* Viewport-level connector overlay uses measured pixel rectangles for exact card attachment. */
+.canvas-connections-overlay{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1;overflow:visible}
+.canvas-world{z-index:2}
