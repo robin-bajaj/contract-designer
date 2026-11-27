@@ -1,16 +1,16 @@
 """Team Lead-owned dbt project connections and read-only Git model inventory.
 
-The Team Lead supplies dbt account details in the browser, once. A distinct
-server-issued lead access key gates each team (the demo role chooser grants no
-authority). We encrypt the dbt API token in SQLite with an installation-local
-Fernet key, kept separately in a private 0600 file for this localhost POC.
-For multi-user production, replace access keys with SSO and local key files
-with a centralized secret store / KMS.
+The Team Lead supplies dbt account details in the browser, once. For the
+localhost-only POC, the optional lead access code is omitted. The demo role
+selector does NOT authenticate users. The HTTP gateway restricts onboarding
+requests to the local development origin; do not expose the service publicly.
+Service tokens remain encrypted in SQLite with an installation-local Fernet
+key stored separately in a private 0600 file. Production requires authenticated
+team permissions and centralized secret management.
 """
 from __future__ import annotations
 
 import base64
-import hmac
 import json
 import os
 from pathlib import Path
@@ -25,7 +25,6 @@ from cryptography.fernet import Fernet, InvalidToken
 from . import dbt_cloud, team_portal
 
 TEAM_PREFIX = {"team-a": "team_a", "team-c": "team_c"}
-LEAD_KEYS = {"team-a": "PORTAL_TEAM_A_LEAD_KEY", "team-c": "PORTAL_TEAM_C_LEAD_KEY"}
 GITHUB_REPO = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 SEGMENT = re.compile(r"^[A-Za-z0-9_.-]+$")
 MAX_INVENTORY_FILES = 60
@@ -34,14 +33,11 @@ KEY_FILE_NAME = "integrations.key"
 _key_lock = threading.Lock()
 
 
-def require_lead(role: str, supplied: str | None) -> None:
-    if role not in LEAD_KEYS:
-        raise team_portal.PortalError("Only Team A/C leads can connect a project", 403)
-    expected = os.environ.get(LEAD_KEYS[role], "")
-    if len(expected) < 16:
-        raise team_portal.PortalError("Team Lead access is not configured by the platform operator", 503)
-    if not isinstance(supplied, str) or not hmac.compare_digest(expected, supplied):
-        raise team_portal.PortalError("Team Lead authorization required", 403)
+def require_team(role: str) -> None:
+    # This validates the requested team identifier only. Authentication
+    # must be added before exposing the portal to anyone beyond localhost.
+    if role not in TEAM_PREFIX:
+        raise team_portal.PortalError("Only Team A or Team C can connect a dbt project", 403)
 
 
 def connect():
@@ -148,8 +144,8 @@ def _credentials(payload: dict) -> dict:
     return {"host": host, "accountId": value, "token": token}
 
 
-def preview_account(role: str, lead_key: str | None, payload: dict) -> dict:
-    require_lead(role, lead_key)
+def preview_account(role: str, payload: dict) -> dict:
+    require_team(role)
     cred = _credentials(payload)
     result = [
         {"id": p["id"], "name": p.get("name") or f"Project {p['id']}",
@@ -214,8 +210,8 @@ def _subdirectory(project: dict) -> str:
         raise team_portal.PortalError("Unsupported dbt project subdirectory", 422)
     return raw + "/"
 
-def preview_project(role: str, lead_key: str | None, payload: dict) -> dict:
-    require_lead(role, lead_key)
+def preview_project(role: str, payload: dict) -> dict:
+    require_team(role)
     cred = _credentials(payload)
     project_id = payload.get("projectId")
     if type(project_id) is not int or project_id < 1:
@@ -232,13 +228,13 @@ def preview_project(role: str, lead_key: str | None, payload: dict) -> dict:
     }
 
 
-def assign(role: str, lead_key: str | None, payload: dict) -> dict:
-    require_lead(role, lead_key)
+def assign(role: str, payload: dict) -> dict:
+    require_team(role)
     cred = _credentials(payload)
     environment_id = payload.get("environmentId")
     if type(environment_id) is not int or environment_id < 1:
         raise team_portal.PortalError("Choose an environment from the selected project", 400)
-    preview = preview_project(role, lead_key, payload)
+    preview = preview_project(role, payload)
     selected = next((e for e in preview["environments"] if e["id"] == environment_id), None)
     if selected is None:
         raise team_portal.PortalError("Selected environment does not belong to the dbt project", 422)
@@ -262,9 +258,9 @@ def assign(role: str, lead_key: str | None, payload: dict) -> dict:
     return connection_for(role)
 
 
-def connection_secret(role: str, lead_key: str | None) -> dict:
-    """Server-only retrieval, never returned through an HTTP handler."""
-    require_lead(role, lead_key)
+def connection_secret(role: str) -> dict:
+    """Internal-only retrieval; never expose this method through HTTP."""
+    require_team(role)
     with connect() as db:
         row = db.execute("SELECT * FROM project_connections WHERE role=?", (role,)).fetchone()
     if row is None or not row["token_ciphertext"]:
