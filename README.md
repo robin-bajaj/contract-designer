@@ -5,12 +5,17 @@
 
 1. **dbt Cloud API host** — e.g. `tc225.us1.dbt.com` (hostname only).
 2. **dbt Cloud account ID** — numeric dbt account identifier.
-3. **dbt Cloud service token** — scoped token authorized to read projects,
-   environments and the linked repository.
+3. **dbt Cloud API token** — a Personal Access Token (PAT) or a service
+   token with permission to read projects, environments and the linked repository.
+   **Starter accounts:** dbt currently restricts service-token permission sets;
+   use a short-lived PAT from Account Settings → API tokens → Personal tokens,
+   created by a user with the required project read permissions.
 
 Then choose **Discover dbt projects**, select an existing dbt Cloud project
 and development environment, and connect. The Python backend encrypts the
-token before saving it in SQLite. The secret encryption key is a separate
+token before saving it in SQLite. For discovery, it uses dbt's Administrative
+API v3 project-scoped routes. A `404` should prompt checking the numeric
+Account ID (not project/user ID), API host, and token's account access. The secret encryption key is a separate
 private local file, `.portal/integrations.key` (mode 0600).
 
 ```bash
