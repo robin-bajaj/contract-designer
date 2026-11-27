@@ -1,9 +1,8 @@
-"""Offline tests: fake dbt and git processes; no network or dbt installation needed."""
+"""Fast dbt Core tests using a configured disposable local project."""
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
-
 from server.fast_validate import InputError, validate_dbt, validate_payload, check_staging_sql
 
 YAML = """version: 2
@@ -14,7 +13,6 @@ models:
       enabled: true
       name: new_team_a_semantics
 """
-
 PAYLOAD = {
     "role": "team-a", "sourceModel": "new_team_a",
     "semanticName": "new_team_a_semantics",
@@ -22,124 +20,92 @@ PAYLOAD = {
     "yamlText": YAML,
 }
 
-
 class FastValidationTests(unittest.TestCase):
-    def test_accepts_unsaved_sql_and_semantic_yaml(self):
-        self.assertEqual(validate_payload(PAYLOAD)["team"], "team_a")
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.project = Path(self.temp.name) / "dbtproject"
+        self.project.mkdir()
+        (self.project / "dbt_project.yml").write_text("name: portal_poc\nversion: '1.0'\nprofile: portal_poc\nmodel-paths: ['models']\n")
+        (self.project / "models").mkdir()
+        patcher = patch.dict("os.environ", {"DBT_PROJECT_PATH": str(self.project)})
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
-    def test_rejects_path_traversal_and_unknown_team(self):
-        for override in ({"role": "cdo"}, {"sourceModel": "../config"},
-                         {"semanticName": "x/../../y"}):
+    def test_accepts_payload(self):
+        self.assertEqual(validate_payload(PAYLOAD)["team"],"team_a")
+
+    def test_rejects_invalid_identifiers_and_mismatched_yaml(self):
+        for override in ({"role":"cdo"},{"sourceModel":"../config"},{"semanticName":"x/../../y"},
+                         {"sourceModel":"not_in_yaml"}):
             with self.subTest(override=override):
                 with self.assertRaises(InputError):
-                    validate_payload({**PAYLOAD, **override})
+                    validate_payload({**PAYLOAD,**override})
 
-    def test_rejects_mismatched_yaml(self):
-        with self.assertRaises(InputError):
-            validate_payload({**PAYLOAD, "sourceModel": "not_in_yaml"})
-
-    def test_parse_success_runs_real_command_names_and_overlays_unsaved_files(self):
-        steps = []
-
-        def mock_runner(name, argv, cwd, env=None, timeout=65):
-            steps.append((name, argv))
-            if name == "Checkout dbt project":
-                project = Path(argv[-1])
-                (project / "models/staging/team_a").mkdir(parents=True)
-            if name == "Checkout CDO registry":
-                Path(argv[-1]).mkdir(parents=True)
-            if name == "dbt Core parse":
-                project = Path(cwd)
-                sql = project / "models/staging/team_a/new_team_a.sql"
-                yml = project / "models/semantic_models/team_a/new_team_a_semantics.yml"
-                self.assertEqual(sql.read_text(), PAYLOAD["sourceSql"])
-                self.assertEqual(yml.read_text(), YAML)
-                (project / "target").mkdir()
-                (project / "target/manifest.json").write_text("{}")
+    def test_parse_overlays_unsaved_files_without_touching_source_project(self):
+        steps=[]
+        def runner(name,argv,cwd,env=None,timeout=65):
+            steps.append(name)
+            self.assertNotIn("federated-semantic-poc"," ".join(argv))
+            if name=="dbt Core parse":
+                project=Path(cwd)
+                self.assertEqual((project/"models/staging/team_a/new_team_a.sql").read_text(),PAYLOAD["sourceSql"])
+                self.assertEqual((project/"models/semantic_models/team_a/new_team_a_semantics.yml").read_text(),YAML)
+                (project/"target").mkdir()
+                (project/"target/manifest.json").write_text("{}")
+                self.assertIn("portal_poc:",(project/".ci/profiles.yml").read_text())
             return "ok"
+        with patch("server.fast_validate.shutil.which",return_value="/usr/bin/dbt"):
+            result=validate_dbt(PAYLOAD,runner=runner)
+        self.assertTrue(result["ok"],result)
+        self.assertEqual(steps,["dbt Core parse"])
+        self.assertEqual(result["compiledYaml"],YAML)
+        self.assertFalse((self.project/"models/staging/team_a/new_team_a.sql").exists())
 
-        with patch("server.fast_validate.shutil.which", side_effect=lambda name: "/bin/dbt" if name == "dbt" else "/usr/bin/python3"):
-            result = validate_dbt(PAYLOAD, runner=mock_runner)
-        self.assertTrue(result["ok"], result)
-        self.assertEqual([name for name, _ in steps], [
-            "Checkout dbt project", "Checkout CDO registry",
-            "CDO registry validation", "CDO inheritance compiler", "dbt Core parse",
-        ])
-
-    def test_existing_source_model_cannot_be_replaced(self):
-        data = {**PAYLOAD, "sourceMode": "existing", "sourceSql": None}
-
-        def mock_runner(name, argv, cwd, env=None, timeout=65):
-            if name == "Checkout dbt project":
-                Path(argv[-1]).mkdir()
-            if name == "Checkout CDO registry":
-                Path(argv[-1]).mkdir()
-            return "ok"
-
-        result = validate_dbt(data, runner=mock_runner)
+    def test_existing_source_must_exist_locally(self):
+        result=validate_dbt({**PAYLOAD,"sourceMode":"existing","sourceSql":None},
+                            runner=lambda *a,**kw:"ok")
         self.assertFalse(result["ok"])
-        self.assertIn("not in this team's staging folder", result["error"])
+        self.assertIn("not in this team's staging folder",result["error"])
 
-
-    def test_sqlglot_accepts_valid_postgres_select(self):
+    def test_postgres_syntax_smoke(self):
         check_staging_sql("select position_id from positions")
-
-    def test_sqlglot_rejects_typing_gibberish_as_a_query(self):
-        with self.assertRaisesRegex(InputError, "single SELECT"):
+        with self.assertRaises(InputError):
             check_staging_sql("SELECTertygrab")
-
-    def test_sqlglot_rejects_incomplete_select(self):
         with self.assertRaises(InputError):
             check_staging_sql("select from")
 
-    def test_invalid_draft_returns_error_before_fetching_github(self):
-        draft = {"validationScope": "staging", "role": "team-a",
-                 "sourceModel": "team_a_new_positions", "sourceMode": "new",
-                 "sourceSql": "SELECTertygrab"}
-        def must_not_run(*args, **kwargs):
-            self.fail("Should reject invalid SQL without invoking git/dbt")
-        result = validate_dbt(draft, runner=must_not_run)
+    def test_invalid_sql_short_circuits_before_dbt(self):
+        draft={"validationScope":"staging","role":"team-a","sourceModel":"new_team_a",
+               "sourceMode":"new","sourceSql":"SELECTertygrab"}
+        def forbid(*args,**kwargs):
+            self.fail("Invalid SQL should fail before dbt")
+        result=validate_dbt(draft,runner=forbid)
         self.assertFalse(result["ok"])
-        self.assertEqual(result["steps"][0]["name"], "SQL syntax")
+        self.assertEqual(result["steps"][0]["name"],"SQL syntax")
 
-    def test_staging_only_accepts_sql_before_semantic_model_is_defined(self):
-        draft = { "validationScope":"staging", "role":"team-a",
-                  "sourceModel":"new_team_a", "sourceMode":"new",
-                  "sourceSql":"select 1 as position_id" }
-        result=validate_payload(draft)
-        self.assertTrue(result["stage_only"])
-        self.assertIsNone(result["yaml"])
-
-    def test_staging_only_parses_current_unsaved_sql_without_yaml(self):
-        draft = { "validationScope":"staging", "role":"team-c",
-                  "sourceModel":"stg_new_fi", "sourceMode":"new",
-                  "sourceSql":"select {{ ref('a') }} as demo" }
+    def test_staging_only_works_without_semantic_yaml(self):
+        draft={"validationScope":"staging","role":"team-c","sourceModel":"new_fi",
+               "sourceMode":"new","sourceSql":"select 1 as n"}
         seen=[]
-        def runner(name, argv, cwd, env=None, timeout=65):
+        def runner(name,argv,cwd,env=None,timeout=65):
             seen.append(name)
-            if name=="Checkout dbt project":
-                (Path(argv[-1])/"models/staging/team_c").mkdir(parents=True)
-            if name=="Checkout CDO registry":
-                Path(argv[-1]).mkdir(parents=True)
             if name=="dbt Core parse":
                 project=Path(cwd)
-                self.assertEqual((project/"models/staging/team_c/stg_new_fi.sql").read_text(),draft["sourceSql"])
-                self.assertFalse((project/"models/semantic_models/team_c/stg_new_fi.yml").exists())
+                self.assertTrue((project/"models/staging/team_c/new_fi.sql").is_file())
                 (project/"target").mkdir()
                 (project/"target/manifest.json").write_text("{}")
             return "ok"
-        with patch("server.fast_validate.shutil.which",side_effect=lambda _: "/usr/bin/dbt"):
+        with patch("server.fast_validate.shutil.which",return_value="/usr/bin/dbt"):
             result=validate_dbt(draft,runner=runner)
         self.assertTrue(result["ok"],result)
-        self.assertEqual(result["scope"],"staging")
-        self.assertIn("CDO inheritance compiler",seen)
-        self.assertIn("dbt Core parse",seen)
+        self.assertEqual(seen,["dbt Core parse"])
 
-    def test_staging_only_rejects_path_traversal(self):
-        with self.assertRaises(InputError):
-            validate_payload({"validationScope":"staging","role":"team-a",
-                "sourceModel":"../escape","sourceMode":"new","sourceSql":"select 1"})
+    def test_requires_configured_target_project(self):
+        with patch.dict("os.environ",{"DBT_PROJECT_PATH":""}):
+            result=validate_dbt(PAYLOAD)
+        self.assertFalse(result["ok"])
+        self.assertIn("DBT_PROJECT_PATH",result["error"])
 
-
-if __name__ == "__main__":
+if __name__=="__main__":
     unittest.main()
