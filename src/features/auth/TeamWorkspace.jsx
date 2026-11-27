@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { AlertCircle, CheckCircle2, Database, GitBranch, Plus, RefreshCw } from 'lucide-react'
 import { ROLE_OPTIONS } from './roles.js'
 import { parseTeamSemanticFile } from '../../services/github/teamSemanticRegistry.js'
-import { listPortalModels, listPortalSources, dbtBackendStatus } from '../../services/portal/teamPortalApi.js'
+import { listPortalModels, listPortalSources, deletePortalDraft, dbtBackendStatus } from '../../services/portal/teamPortalApi.js'
 import { teamConnectedModels, teamConnectedFile } from '../../services/portal/projectConnectionApi.js'
 import { fetchGovernanceContracts } from '../../services/github/githubRegistry.js'
 import TeamModelEditor from './TeamModelEditor.jsx'
@@ -110,6 +110,9 @@ export default function TeamWorkspace({ role }) {
   const [error, setError] = useState('')
   const [selectedId, setSelectedId] = useState(null)
   const [generation, setGeneration] = useState(0)
+  const [draftActionError, setDraftActionError] = useState('')
+  const [fileSearch, setFileSearch] = useState('')
+  const [fileArea, setFileArea] = useState('all')
 
   useEffect(() => {
     let active = true
@@ -152,6 +155,22 @@ export default function TeamWorkspace({ role }) {
     finally{setOpenedFileLoading(false)}
   }
 
+  const removeDraft = async draft => {
+    if (draft.status === 'published') return
+    if (!window.confirm(`Delete unsaved portal draft "${draft.semanticName || draft.sourceModel || 'Untitled draft'}"? This will not delete files in GitHub.`)) return
+    setDraftActionError('')
+    try {
+      await deletePortalDraft(draft.id, role)
+      setGeneration(value => value + 1)
+    } catch (err) { setDraftActionError(err.message) }
+  }
+
+  const projectFiles = (connectedCatalog?.files || []).filter(path => {
+    if (fileArea === 'sql' && !path.endsWith('.sql')) return false
+    if (fileArea === 'yaml' && !path.endsWith(('.yml','.yaml'))) return false
+    return path.toLowerCase().includes(fileSearch.trim().toLowerCase())
+  })
+
   const presentations = useMemo(() => models.flatMap(draft => {
     if (!draft.yamlText?.trim()) return []
     try {
@@ -193,6 +212,22 @@ export default function TeamWorkspace({ role }) {
             <div><span>Discovered staging models</span><strong>{connectedCatalog.sources.length}</strong></div>
           </div>
           <p>Existing definitions are read from the connected repository. Database credentials stay in dbt Cloud. These previews are read-only; validation and remote editing integration will follow.</p>
+          <h4>Project model explorer (read-only)</h4>
+          <p>Browse SQL and YAML from all model folders in the linked repository. Team A can inspect other teams' definitions without modifying them.</p>
+          <div className="team-dashboard-actions">
+            <input aria-label="Search project model files" placeholder="Search model files…" value={fileSearch} onChange={e=>setFileSearch(e.target.value)}/>
+            <select aria-label="Filter project model files" value={fileArea} onChange={e=>setFileArea(e.target.value)}>
+              <option value="all">All model files</option><option value="sql">SQL only</option><option value="yaml">YAML only</option>
+            </select>
+          </div>
+          <div className="team-connected-source-list" style={{maxHeight:320,overflowY:'auto',marginTop:12}}>
+            {projectFiles.map(path=><button type="button" key={path} className="team-connected-source"
+              disabled={openedFileLoading} onClick={()=>openConnectedFile(path)} title={path}>{path}</button>)}
+            {!projectFiles.length && <p>No matching model files.</p>}
+          </div>
+          <p>{projectFiles.length} matching files; read-only GitHub revision {connectedCatalog.revision?.slice(0,7)||'unknown'}.</p>
+          <button type="button" className="primary team-create-button" onClick={()=>{setEditing(null);setCreating(true)}}><Plus size={15}/> Create model draft</button>
+          <p>This creates a local portal draft, not a GitHub file. Remote editing and pull-request publication are not implemented yet.</p>
           <h4>Staging models</h4>
           {connectedCatalog.sources.length ? <div className="team-connected-source-list">
             {(connectedCatalog.sourceFiles||[]).map(file=><button type="button" key={file.path} className="team-connected-source" disabled={openedFileLoading} onClick={()=>openConnectedFile(file.path)} title="View source SQL">{file.name}</button>)}
@@ -219,12 +254,16 @@ export default function TeamWorkspace({ role }) {
       {!loading && !error && !models.length && <div className="team-empty">No portal-authored models yet. Create a staging and semantic model to get started.</div>}
       {!loading && !error && models.length > 0 && <section className="team-detail-section">
         <h3>Portal models and drafts <span>{models.length}</span></h3>
+        {draftActionError && <p className="team-error" role="alert">{draftActionError}</p>}
         <div className="team-draft-list">
           {models.map(draft=><div className="team-draft-row" key={draft.id}>
             <div><strong>{draft.semanticName||draft.sourceModel||'Untitled draft'}</strong>
               <small>{draft.status} · staging: {draft.sourceModel||'not set'}</small>
             </div>
-            <button type="button" className="outline" onClick={()=>{setEditing(draft);setCreating(true)}}>Continue editing</button>
+            <div className="team-dashboard-actions">
+              <button type="button" className="outline" onClick={()=>{setEditing(draft);setCreating(true)}}>Continue editing</button>
+              {draft.status !== 'published' && <button type="button" className="outline" onClick={()=>removeDraft(draft)}>Delete draft</button>}
+            </div>
           </div>)}
         </div>
       </section>}

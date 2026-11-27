@@ -147,6 +147,19 @@ def load_draft(draft_id: str) -> dict:
     return public(row)
 
 
+def delete_draft(draft_id: str, role: str) -> None:
+    if role not in TEAMS:
+        raise PortalError("Invalid team role", 403)
+    draft = load_draft(draft_id)
+    if draft["role"] != role:
+        raise PortalError("Cannot delete another team's draft", 403)
+    if draft["status"] == "published":
+        raise PortalError("Published models cannot be deleted as drafts", 409)
+    with connect() as conn:
+        conn.execute("DELETE FROM drafts WHERE id=? AND role=? AND published_at IS NULL",
+                     (draft_id, role))
+
+
 def save_draft(payload: object) -> dict:
     if not isinstance(payload, dict) or payload.get("role") not in TEAMS:
         raise PortalError("Only Team A and Team C drafts are supported")

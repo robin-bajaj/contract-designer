@@ -275,7 +275,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         path = urlparse(self.path).path
         allowed = {"/api/validate/fast", "/api/validate/staging",
-                   "/api/team-models/save", "/api/team-models/validate",
+                   "/api/team-models/save", "/api/team-models/delete", "/api/team-models/validate",
                    "/api/team-models/publish", "/api/dbt/jobs/run",
                    "/api/lead/dbt/projects",
                    "/api/lead/dbt/preview", "/api/lead/dbt/connect"}
@@ -320,6 +320,9 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(200, {"ok": True, "connection": connection})
             elif path == "/api/team-models/save":
                 self.send_json(200, {"ok": True, "draft": team_portal.save_draft(payload)})
+            elif path == "/api/team-models/delete":
+                team_portal.delete_draft(payload.get("id", ""), payload.get("role", ""))
+                self.send_json(200, {"ok": True})
             elif path == "/api/team-models/publish":
                 result = team_portal.publish_draft(payload.get("id", ""))
                 self.send_json(200, {"ok": True, **result})

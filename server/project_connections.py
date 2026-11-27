@@ -313,12 +313,10 @@ def _safe_path(row: dict, candidate: str) -> bool:
         segment in (".", "..", "") for segment in candidate.split("/")
     ) or chr(92) in candidate:
         return False
+    # Read-only project-wide model discovery; writes remain outside this API.
+    # Never expose arbitrary repository secrets or files outside dbt's models tree.
     prefix = row["subdirectory"] + "models/"
-    team = TEAM_PREFIX[row["role"]]
-    return (
-        candidate.startswith(prefix + "staging/" + team + "/")
-        or candidate.startswith(prefix + "semantic_models/" + team + "/")
-    ) and candidate.endswith((".sql", ".yml", ".yaml"))
+    return candidate.startswith(prefix) and candidate.endswith((".sql", ".yml", ".yaml"))
 
 
 def _tree(row: dict) -> tuple[list[dict], str]:
@@ -357,6 +355,7 @@ def inventory(role: str) -> dict:
     if row is None:
         return {"connection": None, "sources": [], "sourceFiles": [], "models": [], "revision": None}
     entries, sha = _tree(row)
+    project_files = sorted(item["path"] for item in entries)
     source_paths = sorted(item["path"] for item in entries
                           if item["path"].endswith(".sql")
                           and "/staging/" in item["path"])
@@ -397,6 +396,7 @@ def inventory(role: str) -> dict:
     return {
         "connection": row, "revision": sha, "sources": sources, "sourceFiles": source_files,
         "models": models[:MAX_INVENTORY_FILES],
+        "files": project_files,
         "limited": len(yaml_paths) > MAX_INVENTORY_FILES,
     }
 
