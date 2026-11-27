@@ -83,3 +83,13 @@
 .github-publish-panel a { color: #08764a; text-decoration: underline; }
 
 .registry-sync-status{font-size:11px;line-height:1.5;color:#5b7667;margin:8px 0 12px;overflow-wrap:anywhere}.sidebar button:disabled{opacity:.65;cursor:wait}
+
+/* CDO explorer can collapse without hiding the expand control. */
+.sidebar-toggle-row{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:30px;margin-bottom:9px}
+.sidebar-toggle-row .section-label{margin:0}
+.sidebar-toggle{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:34px;height:34px;border:1px solid #cce5d8;border-radius:6px;background:#f3fbf6;color:#087a4d}
+.sidebar-toggle:hover,.sidebar-toggle:focus-visible{background:#ddf6e8;outline:2px solid #7bcca3;outline-offset:2px}
+.workspace-sidebar-collapsed .sidebar{width:62px;padding:21px 12px;transition:width .15s ease}
+.workspace-sidebar-collapsed .sidebar-toggle-row{justify-content:center}
+.workspace-sidebar-collapsed .main-content{min-width:0;flex:1}
+@media(max-width:550px){.workspace-sidebar-collapsed .sidebar{width:100%;padding:10px 15px}.workspace-sidebar-collapsed .sidebar-toggle-row{justify-content:flex-start;margin:0}}
