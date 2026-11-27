@@ -34,3 +34,14 @@ test('View YAML does not scroll page when preview is visible side by side',()=>{
   assert.match(editor,/Copy YAML/)
   assert.match(editor,/Download \.yml/)
 })
+
+test('CDO authoring form uses compact controls without affecting the canvas',()=>{
+  assert.match(css,/\.main-content:has\(\.editor-split-layout\)\{padding:18px 22px 42px\}/)
+  assert.match(css,/\.editor-split-layout \.editor-intro \.eyebrow/)
+  assert.match(css,/font-size:18px/)
+  assert.match(css,/\.editor-split-layout \.table-scroll input/)
+  assert.match(css,/height:33px/)
+  assert.match(css,/height:min\(68dvh,690px\)/)
+  assert.match(editor,/placeholder="Describe the contract's business purpose"/)
+  assert.match(editor,/Child descriptions remain editor-only/)
+})
