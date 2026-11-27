@@ -109,7 +109,7 @@ def parse_event(event_name: str, body: dict) -> dict | None:
             "installation": installation_id}
 
 
-def check_run(token: str, event: dict, status: str, *, result: dict | None = None) -> int:
+def check_run(token: str, event: dict, status: str, *, result: dict | None = None, check_id: int | None = None) -> int:
     if status == "in_progress":
         payload = {"name": CHECK_NAME, "head_sha": event["sha"], "status": status}
     else:
@@ -124,8 +124,13 @@ def check_run(token: str, event: dict, status: str, *, result: dict | None = Non
                 "text": "\n".join(f"- {x['name']}: {x['status']}" for x in (result or {}).get("steps", [])),
             },
         }
-    response = github_request(f"/repos/{event['repository']}/check-runs", token,
-                              method="POST", body=payload)
+    endpoint = f"/repos/{event['repository']}/check-runs"
+    if check_id is not None:
+        endpoint += f"/{check_id}"
+        payload.pop("head_sha", None)
+        payload.pop("name", None)
+    response = github_request(endpoint, token,
+                              method="PATCH" if check_id is not None else "POST", body=payload)
     number = response.get("id")
     if type(number) is not int:
         raise AppError("GitHub did not create a Check Run")
@@ -150,10 +155,10 @@ def execute_event(event: dict) -> dict:
                 "portal/" + central_ci.team_ids.folder(event["role"]) + "/")
             or (pr.get("base") or {}).get("ref") != central_ci.project_connections.connection_for(event["role"])["branch"]):
         return {"ok": False, "error": "PR commit or team branch changed; enqueue latest commit"}
-    check_run(token, event, "in_progress")
+    check_id = check_run(token, event, "in_progress")
     try:
         result = central_ci.validate_pr(event["role"], event["repository"], event["sha"])
     except Exception:
         result = {"ok": False, "error": "Central validation worker raised an error"}
-    check_run(token, event, "completed", result=result)
+    check_run(token, event, "completed", result=result, check_id=check_id)
     return result
