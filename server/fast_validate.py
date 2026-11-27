@@ -16,7 +16,7 @@ import tempfile
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
-from . import team_portal, dbt_cloud, project_connections, project_snapshot
+from . import team_portal, dbt_cloud, project_connections, project_snapshot, validation_diagnostics
 
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("FAST_VALIDATE_PORT", "8765"))
@@ -250,8 +250,11 @@ def validate_dbt(payload: object, *, runner=run_command) -> dict:
                     "hint": "Check the model refs in the connected dbt project at the revision used for validation.",
                     "mode": "parse-only",
                 }
+            diagnostics = validation_diagnostics.diagnose(exc.output) if exc.step == "dbt Core parse" else []
             return {"ok": False, "steps": steps, "log": exc.output,
-                    "error": f"{exc.step} failed", "mode": "parse-only"}
+                    "diagnostics": diagnostics,
+                    "error": diagnostics[0]["message"] if diagnostics else f"{exc.step} failed",
+                    "mode": "parse-only"}
         except InputError as exc:
             steps.append({"name": "Validate source files", "status": "failed"})
             return {"ok": False, "steps": steps, "log": str(exc), "error": str(exc), "mode": "parse-only"}
