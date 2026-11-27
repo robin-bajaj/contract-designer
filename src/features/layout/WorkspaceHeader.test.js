@@ -10,9 +10,9 @@ const designer = read('../../App.jsx')
 const teams = read('../auth/TeamWorkspace.jsx')
 const header = read('./WorkspaceHeader.jsx')
 
-test('one shared workspace header is rendered before all three role workspaces', () => {
+test('one shared workspace header is rendered before every registered role workspace', () => {
   assert.equal(ROLE_OPTIONS.length, 3)
-  assert.match(gateway, /<WorkspaceHeader\s+role=\{role\}\s+onLogout=\{signOut\}/)
+  assert.match(gateway, /<WorkspaceHeader\s+role=\{role\}\s+roleOptions=\{roleOptions\}\s+onLogout=\{signOut\}/)
   assert.match(gateway, /canAccessDesigner\(role\)\s*\?\s*<ContractDesigner\s*\/>/)
   assert.match(gateway, /:\s*<TeamWorkspace/)
   assert.doesNotMatch(designer, /<header\b/)
@@ -20,8 +20,8 @@ test('one shared workspace header is rendered before all three role workspaces',
 })
 
 test('shared header has a role indicator and a working sign out callback', () => {
-  assert.match(header, /ROLE_OPTIONS\.find\(/)
+  assert.match(header, /roleOptions\.find\(/)
   assert.match(header, /currentRole\?\.label/)
   assert.match(header, /onClick=\{onLogout\}/)
-  assert.match(header, /SEMANTIC GOVERNANCE/)
+  assert.match(header, /SEMANTIC GOVERNANCE/)\n  assert.match(gateway, /fetch\(\x27\/api\/teams\x27\)/)
 })
