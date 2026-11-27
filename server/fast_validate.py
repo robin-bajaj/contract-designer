@@ -16,7 +16,7 @@ import tempfile
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
-from . import team_portal, dbt_cloud, project_connections, project_snapshot, validation_diagnostics
+from . import team_portal, dbt_cloud, project_connections, project_snapshot, validation_diagnostics, team_registry
 
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("FAST_VALIDATE_PORT", "8765"))
@@ -263,6 +263,7 @@ def validate_dbt(payload: object, *, runner=run_command) -> dict:
 ONBOARDING_PATHS = frozenset({
     "/api/lead/dbt/projects", "/api/lead/dbt/preview", "/api/lead/dbt/connect",
     "/api/lead/github/connect", "/api/lead/github/disconnect",
+    "/api/teams/register",
     "/api/team-models/publish",
 })
 
@@ -296,7 +297,8 @@ class Handler(BaseHTTPRequestHandler):
                    "/api/team-models/publish", "/api/dbt/jobs/run",
                    "/api/lead/dbt/projects",
                    "/api/lead/dbt/preview", "/api/lead/dbt/connect",
-                   "/api/lead/github/connect", "/api/lead/github/disconnect"}
+                   "/api/lead/github/connect", "/api/lead/github/disconnect",
+                   "/api/teams/register"}
         if path not in allowed:
             self.send_error(404)
             return
@@ -324,7 +326,9 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(429, {"ok": False, "error": "Validation busy; retry shortly"})
             return
         try:
-            if path == "/api/lead/github/connect":
+            if path == "/api/teams/register":
+                self.send_json(200, {"ok": True, "team": team_registry.register(payload)})
+            elif path == "/api/lead/github/connect":
                 self.send_json(200, {"ok": True, **project_connections.connect_github_token(payload.get("role"), payload.get("token"))})
             elif path == "/api/lead/github/disconnect":
                 self.send_json(200, {"ok": True, **project_connections.disconnect_github_token(payload.get("role"))})
@@ -381,7 +385,9 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         try:
-            if path == "/api/health":
+            if path == "/api/teams":
+                self.send_json(200, {"ok": True, "roles": team_registry.list_roles()})
+            elif path == "/api/health":
                 self.send_json(200, {"status": "ready", "engine": "dbt-core",
                                      "workspaceReady": (team_portal.project_path() / "dbt_project.yml").is_file()})
             elif path == "/api/dbt/status":
