@@ -3,7 +3,7 @@ export const FEDERATED_REPO = 'robin-bajaj/federated-semantic-poc'
 
 export function teamFolder(role) {
   if (typeof role !== 'string' || !/^team-[a-z][a-z0-9-]{0,48}$/.test(role)) {
-    throw Error('Invalid team role')
+    throw Error('Unknown team role or invalid team identifier')
   }
   return role.replaceAll('-', '_')
 }
