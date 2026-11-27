@@ -16,7 +16,7 @@ import tempfile
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
-from . import team_portal, dbt_cloud
+from . import team_portal, dbt_cloud, prepublish
 
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("FAST_VALIDATE_PORT", "8765"))
@@ -278,8 +278,8 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/team-models/save":
                 self.send_json(200, {"ok": True, "draft": team_portal.save_draft(payload)})
             elif path == "/api/team-models/publish":
-                result = team_portal.publish_draft(payload.get("id", ""))
-                self.send_json(200, {"ok": True, **result})
+                result = prepublish.start(payload.get("id", ""))
+                self.send_json(202, {"ok": True, **result})
             elif path == "/api/team-models/validate":
                 draft = team_portal.load_draft(payload.get("id", ""))
                 data = team_portal.validate_input(draft)
@@ -321,7 +321,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(200, {
                     "workspaceReady": (project / "dbt_project.yml").is_file(),
                     "validationReady": bool(shutil.which("dbt")),
-                    "publishingMode": "portal-managed-local",
+                    "publishingMode": "neon-preflight-pr-gated",
+                    "prepublishConfigured": bool(os.environ.get("PORTAL_GITHUB_TOKEN")),
                     # Backwards-compatible fields for existing dashboard clients.
                     "dbtCoreAvailable": bool(shutil.which("dbt")),
                     "localProjectConfigured": True,
@@ -331,6 +332,9 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/api/team-models":
                 role = parse_qs(parsed.query).get("role", [""])[0]
                 self.send_json(200, {"models": team_portal.list_drafts(role)})
+            elif path == "/api/team-models/prepublish":
+                draft_id = parse_qs(parsed.query).get("id", [""])[0]
+                self.send_json(200, {"ok": True, **prepublish.inspect(draft_id)})
             elif path == "/api/team-models/sources":
                 role = parse_qs(parsed.query).get("role", [""])[0]
                 self.send_json(200, {"sources": team_portal.source_models(role)})
