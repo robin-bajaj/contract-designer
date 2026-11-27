@@ -47,3 +47,7 @@ export const publishPortalDraft=(id,fetchImpl=fetch)=>
 
 export const dbtBackendStatus=(fetchImpl=fetch)=>
   request('/api/dbt/status','GET',null,fetchImpl)
+
+export const centralCIStatus=(role,prNumber,fetchImpl=fetch)=>
+  request(`/api/central-ci/status?role=${encodeURIComponent(role)}&pr=${encodeURIComponent(prNumber)}`,'GET',null,fetchImpl)
+    .then(result=>result.jobs)

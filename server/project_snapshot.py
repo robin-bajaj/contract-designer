@@ -32,7 +32,7 @@ def team_folder(role: str) -> str:
         raise team_portal.PortalError(str(exc), 400) from exc
 
 
-def snapshot(role: str, destination: Path) -> dict:
+def snapshot(role: str, destination: Path, *, commit_sha: str | None = None) -> dict:
     """Copy the *entire linked dbt project*, pinned to a verified branch SHA."""
     project_connections.require_team(role)
     connection = project_connections.connection_for(role)
@@ -48,10 +48,18 @@ def snapshot(role: str, destination: Path) -> dict:
         if row and row["github_token_ciphertext"]:
             token = project_connections._decrypt(row["github_token_ciphertext"])
 
-    details = project_connections._github_request(
-        f"/repos/{repository}/branches/{quote(branch, safe='')}", token
-    )
-    revision = (details.get("commit") or {}).get("sha")
+    if commit_sha is not None:
+        if not SHA.fullmatch(commit_sha):
+            raise team_portal.PortalError("Invalid PR commit SHA", 400)
+        details = project_connections._github_request(
+            f"/repos/{repository}/commits/{commit_sha}", token
+        )
+        revision = details.get("sha")
+    else:
+        details = project_connections._github_request(
+            f"/repos/{repository}/branches/{quote(branch, safe='')}", token
+        )
+        revision = (details.get("commit") or {}).get("sha")
     if not isinstance(revision, str) or not SHA.fullmatch(revision):
         raise team_portal.PortalError("Could not verify connected project's Git revision", 502)
     url = f"https://api.github.com/repos/{repository}/zipball/{revision}"

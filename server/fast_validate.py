@@ -16,7 +16,7 @@ import tempfile
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
-from . import team_portal, dbt_cloud, project_connections, project_snapshot, validation_diagnostics, team_registry
+from . import team_portal, dbt_cloud, project_connections, project_snapshot, validation_diagnostics, team_registry, github_app_ci, central_ci_queue
 
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("FAST_VALIDATE_PORT", "8765"))
@@ -292,6 +292,32 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlparse(self.path).path
+        if path == "/api/github/webhook":
+            # Signed events are accepted without browser origin checks.
+            try:
+                count = int(self.headers.get("Content-Length", ""))
+            except ValueError:
+                count = -1
+            if count < 1 or count > github_app_ci.MAX_WEBHOOK:
+                self.send_json(413, {"ok": False, "error": "Invalid webhook size"})
+                return
+            raw = self.rfile.read(count)
+            if not github_app_ci.verify_webhook(raw, self.headers.get("X-Hub-Signature-256")):
+                self.send_json(403, {"ok": False, "error": "Invalid webhook signature"})
+                return
+            try:
+                event = json.loads(raw)
+                if not isinstance(event, dict):
+                    raise ValueError("Invalid event body")
+                accepted = github_app_ci.handle_verified_event(
+                    self.headers.get("X-GitHub-Event", ""), event,
+                    dispatch=central_ci_queue.enqueue,
+                )
+            except (ValueError, team_portal.PortalError):
+                self.send_json(400, {"ok": False, "error": "Invalid webhook payload"})
+                return
+            self.send_json(202, {"ok": True, "queued": accepted})
+            return
         allowed = {"/api/validate/fast", "/api/validate/staging",
                    "/api/team-models/save", "/api/team-models/delete", "/api/team-models/validate",
                    "/api/team-models/publish", "/api/dbt/jobs/run",
@@ -385,7 +411,14 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         try:
-            if path == "/api/teams":
+            if path == "/api/central-ci/status":
+                params = parse_qs(parsed.query)
+                role = params.get("role", [""])[0]
+                raw_number = params.get("pr", [""])[0]
+                if not team_registry.team_ids.is_team(role) or not raw_number.isdigit():
+                    raise team_portal.PortalError("Valid team role and PR number required", 400)
+                self.send_json(200, {"ok": True, "jobs": central_ci_queue.status(role, int(raw_number))})
+            elif path == "/api/teams":
                 self.send_json(200, {"ok": True, "roles": team_registry.list_roles()})
             elif path == "/api/health":
                 self.send_json(200, {"status": "ready", "engine": "dbt-core",
