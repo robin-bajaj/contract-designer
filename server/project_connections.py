@@ -22,9 +22,9 @@ from urllib.request import Request, urlopen
 
 import yaml
 from cryptography.fernet import Fernet, InvalidToken
-from . import dbt_cloud, team_portal
+from . import dbt_cloud, team_portal, team_ids
 
-TEAM_PREFIX = {"team-a": "team_a", "team-c": "team_c"}
+
 GITHUB_REPO = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 SEGMENT = re.compile(r"^[A-Za-z0-9_.-]+$")
 MAX_INVENTORY_FILES = 60
@@ -36,8 +36,8 @@ _key_lock = threading.Lock()
 def require_team(role: str) -> None:
     # This validates the requested team identifier only. Authentication
     # must be added before exposing the portal to anyone beyond localhost.
-    if role not in TEAM_PREFIX:
-        raise team_portal.PortalError("Only Team A or Team C can connect a dbt project", 403)
+    if not team_ids.is_team(role):
+        raise team_portal.PortalError("A valid team identifier is required to connect a dbt project", 403)
 
 
 def connect():
@@ -122,7 +122,7 @@ def _clean(row) -> dict | None:
 
 
 def connection_for(role: str) -> dict | None:
-    if role not in TEAM_PREFIX:
+    if not team_ids.is_team(role):
         raise team_portal.PortalError("Unknown team", 400)
     with connect() as db:
         row = db.execute("SELECT * FROM project_connections WHERE role=?", (role,)).fetchone()
@@ -435,7 +435,7 @@ def inventory(role: str) -> dict:
         return {"connection": None, "sources": [], "sourceFiles": [], "models": [], "files": [], "revision": None}
     entries, sha = _tree(row)
     project_files = sorted(item["path"] for item in entries)
-    team = TEAM_PREFIX[role]
+    team = team_ids.folder(role)
     models_root = row["subdirectory"] + "models/"
     source_paths = sorted(item["path"] for item in entries
                           if item["path"].endswith(".sql")
