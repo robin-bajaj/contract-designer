@@ -27,7 +27,7 @@ export default function ContractExplorer({ contracts, search, activeId, onOpen, 
         <button type="button" className="nav-link" title={`${contract.name} v${contract.version} · double-click or right-click for options`}
           onDoubleClick={event => {event.preventDefault();setMenuId(contract.id)}}
           onContextMenu={event => {event.preventDefault();setMenuId(contract.id)}}
-          onClick={() => contract.uses ? (setMenuId(null), onOpen(contract.id)) : setMenuId(current => current === contract.id ? null : contract.id)}>
+          onClick={() => setMenuId(current => current === contract.id ? null : contract.id)}>
           {contract.uses ? <Link2 size={15}/> : <Layers size={15}/>}
           <span>{contract.name}</span>
           <small>v{contract.version}</small>
