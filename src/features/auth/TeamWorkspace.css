@@ -42,3 +42,12 @@
 .team-dashboard>.team-demo-note{font-size:11px;color:#8b9a91;margin:25px 0 0}
 @media(max-width:800px){.team-meta-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.team-dashboard{padding:25px 15px}.team-model-details{padding:16px}}
 @media(max-width:460px){.team-meta-grid{grid-template-columns:1fr}.team-model-picker select{min-width:100%}}
+
+/* Portal-owned draft cards; no link to the old federated model repository. */
+.team-draft-list{display:grid;gap:8px}
+.team-draft-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 13px;border:1px solid #dfebe4;border-radius:7px;background:#fff}
+.team-draft-row div{display:flex;flex-direction:column;gap:3px;min-width:0}
+.team-draft-row strong{color:#244e36;overflow-wrap:anywhere}
+.team-draft-row small{color:#6a8a78}
+.team-draft-row button{flex-shrink:0;font-size:12px}
+@media(max-width:600px){.team-draft-row{align-items:flex-start;flex-direction:column}}
