@@ -9,7 +9,7 @@ import json
 import os
 import re
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.request import Request, urlopen, HTTPRedirectHandler, build_opener
 
 
 class DbtCloudError(RuntimeError):
@@ -114,6 +114,12 @@ def validate_host(host: str) -> str:
     raise DbtCloudError("Use your account's dbt API hostname shown in Account settings")
 
 
+class _NoCredentialRedirect(HTTPRedirectHandler):
+    """Never forward a dbt service token to an API redirect target."""
+    def redirect_request(self, request, fp, code, message, headers, newurl):
+        return None
+
+
 def connection_request(credentials: dict, resource: str, *, opener=None) -> dict:
     """Authenticated read-only request for a Team Lead-supplied dbt account."""
     host = validate_host(credentials.get("host"))
@@ -130,9 +136,14 @@ def connection_request(credentials: dict, resource: str, *, opener=None) -> dict
         "Authorization": f"Token {token}", "Accept": "application/json",
     })
     try:
-        with (opener or urlopen)(req, timeout=20) as response:
+        # urllib's default redirect handler could propagate Authorization.
+        # Explicitly refuse redirects for all credentialed onboarding calls.
+        sender = opener or build_opener(_NoCredentialRedirect()).open
+        with sender(req, timeout=20) as response:
             data = json.load(response)
     except HTTPError as exc:
+        if exc.code in (301, 302, 303, 307, 308):
+            raise DbtCloudError("dbt API redirected; verify the API Access URL") from exc
         if exc.code in (401, 403):
             raise DbtCloudError("dbt rejected the service token or its permissions") from exc
         raise DbtCloudError(f"dbt returned HTTP {exc.code}") from exc
