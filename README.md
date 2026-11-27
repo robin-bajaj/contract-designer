@@ -247,3 +247,14 @@ Each inherited contract relationship is now drawn as a **shape-bound straight ar
 The binding always uses the exact pinned `uses.name` and `uses.version`, never a similarly named newer contract. Coordinates come from the **actual rendered DOM rectangles** and are refreshed after drag, pan, zoom, viewport/card resize, and contract changes. This makes the relationship readable even if the user manually places contracts in arbitrary positions.
 
 This uses native SVG and our existing React canvas, **not an embedded Excalidraw editor**. Manually arranged positions are preserved and remain stored locally. The existing toolbar remains −, percentage, +, and Center at 100%.
+
+## Side-by-side live YAML previews (CDO and teams)
+
+The **CDO Contract Editor** and **Team A / Team C Semantic Model Editor** use the available desktop width to display the authoring form on the **left** and the current YAML preview on the **right**.
+
+- On desktop, the right panel stays visible while the left form scrolls. YAML has its own independent scrolling area and a persistent header; copy/download actions remain available.
+- The CDO pane respects the actual width remaining after the collapsible contract explorer, rather than simply using a screen-width breakpoint. **View YAML** reveals the panel if hidden without unexpectedly scrolling away from the form when both columns are visible.
+- The Team A/C pane preserves its existing live YAML generation, copy/download, and dbt validation controls; this change is layout-only, and does not change compilation/validation behavior.
+- On narrower viewports, the preview stacks **below** the form, with its own scrollable code area instead of compressing form fields beyond usability.
+
+The two editors are the only source-authoring views in the current portal with YAML previews; contract canvas, team model browser, GitHub publishing and other workflows are unchanged.
