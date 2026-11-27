@@ -276,12 +276,13 @@ def _file(row: dict, path: str, sha: str) -> str:
 def inventory(role: str) -> dict:
     row = connection_for(role)
     if row is None:
-        return {"connection": None, "sources": [], "models": [], "revision": None}
+        return {"connection": None, "sources": [], "sourceFiles": [], "models": [], "revision": None}
     entries, sha = _tree(row)
     source_paths = sorted(item["path"] for item in entries
                           if item["path"].endswith(".sql")
                           and "/staging/" in item["path"])
     sources = sorted({Path(path).stem for path in source_paths})
+    source_files = [{"name": Path(path).stem, "path": path} for path in source_paths]
     yaml_paths = sorted(item["path"] for item in entries
                         if item["path"].endswith((".yaml", ".yml"))
                         and "/semantic_models/" in item["path"])
@@ -315,7 +316,7 @@ def inventory(role: str) -> dict:
                 ),
             })
     return {
-        "connection": row, "revision": sha, "sources": sources,
+        "connection": row, "revision": sha, "sources": sources, "sourceFiles": source_files,
         "models": models[:MAX_INVENTORY_FILES],
         "limited": len(yaml_paths) > MAX_INVENTORY_FILES,
     }
