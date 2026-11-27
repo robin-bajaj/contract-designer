@@ -8,9 +8,12 @@ const dashboard=read('./TeamWorkspace.jsx')
 const editor=read('./TeamModelEditor.jsx')
 const staging=read('./LiveStagingStatus.jsx')
 
-test('Team A/C dashboard shows plain-language workspace readiness without configuration paths',()=>{
-  assert.match(dashboard,/Model workspace ready/)
-  assert.match(dashboard,/Validation service available/)
+test('Team A/C dashboard uses connected project explorer without configuration paths',()=>{
+  assert.match(dashboard,/CONNECTED DBT PROJECT/)
+  assert.match(dashboard,/dbt-studio-sidebar/)
+  assert.match(dashboard,/dbt-studio-main/)
+  assert.match(dashboard,/read-only/)
+  assert.doesNotMatch(dashboard,/Portal models and drafts/)
   assert.doesNotMatch(dashboard,/DBT_PROJECT_PATH|dbt project:|dbt Cloud Admin:/)
 })
 
