@@ -12,7 +12,6 @@
 .canvas-connections{position:absolute;inset:0;pointer-events:none}
 .canvas-card{width:202px;height:150px;touch-action:none;cursor:grab;user-select:none;transition:box-shadow .15s}
 .canvas-card:active{cursor:grabbing;box-shadow:0 8px 25px #19895535}.canvas-card:focus-visible{outline:3px solid #1a9c64;outline-offset:3px}
-.canvas-mode{position:absolute;bottom:12px;left:14px;border:1px solid #e0e9e3;border-radius:20px;padding:6px 10px;background:#ffffffdf;color:#6b8375;font-size:11px;display:flex;align-items:center;gap:6px;pointer-events:none}
 @media(max-width:850px){.canvas-hint{display:none}.lineage-wrapper{height:500px}}
 
 
