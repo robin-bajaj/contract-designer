@@ -275,5 +275,5 @@ def publish_draft(draft_id: str) -> dict:
     with connect() as conn:
         conn.execute("UPDATE drafts SET published_at=?,updated_at=? WHERE id=?",
                      (now(), now(), draft_id))
-    return {"status": "published-local", "paths": [str(path.relative_to(project)) for path in files],
+    return {"status": "published-local", "paths": [str(path.relative_to(project)) for path, _ in files],
             "message": "Files written to configured local dbt project; no remote Studio/Git deployment was triggered"}
