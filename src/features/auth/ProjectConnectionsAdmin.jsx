@@ -35,7 +35,7 @@ export default function ProjectConnectionsAdmin({role,onBack}) {
     catch(e){setGithubError(e.message)}
     finally{setGithubLoading(false)}
   }
-  const team = role.replace(/^team-/, '').split('-').map(part => part.charAt(0).toUpperCase() + part.slice(1)).join(' ') + ' Team'
+  const team = 'Team ' + role.replace(/^team-/, '').split('-').map(part => part.charAt(0).toUpperCase() + part.slice(1)).join(' ')
   const details=()=>({role,apiHost:apiHost.trim().toLowerCase(),accountId:Number(accountId),serviceToken})
   const resetSelection=()=>{setProjects([]);setProjectId('');setPreview(null);setEnvironmentId('');setSaved(null);setError('')}
 
