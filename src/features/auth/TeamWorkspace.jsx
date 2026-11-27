@@ -27,15 +27,15 @@ function DefinitionTable({ headings, rows, renderRows, empty }) {
 function ModelDetails({ model }) {
   return <div className="team-model-details">
     <div className="team-model-heading">
-      <div><span className="team-label">dbt semantic model</span><h2>{model.semanticName}</h2><p>{model.description || model.modelName}</p></div>
+      <div><span className="team-label">Semantic model</span><h2>{model.semanticName}</h2><p>{model.description || model.modelName}</p></div>
       <span className={`team-status ${model.dbtContractEnforced ? 'yes' : 'muted-status'}`}>
         {model.dbtContractEnforced ? <CheckCircle2 size={15}/> : <AlertCircle size={15}/>}
-        dbt contract {model.dbtContractEnforced ? 'enforced' : 'not enforced'}
+        Model contract {model.dbtContractEnforced ? 'enforced' : 'not enforced'}
       </span>
     </div>
     <div className="team-meta-grid">
       <div><span>Source model</span><strong>{model.modelName}</strong></div>
-      <div><span>dbt group</span><strong>{identifier(model.group)}</strong></div>
+      <div><span>Team group</span><strong>{identifier(model.group)}</strong></div>
       <div><span>Model access</span><strong>{identifier(model.access)}</strong></div>
       <div><span>Aggregation time</span><strong>{identifier(model.aggTimeDimension)}</strong></div>
     </div>
@@ -43,7 +43,7 @@ function ModelDetails({ model }) {
       <GitBranch size={21}/>
       <div><span>CDO Contract Implemented</span>
         <strong>{model.contractRef ? `${model.contractRef.name} · v${model.contractRef.version}` : 'No CDO contract declared'}</strong>
-        <small>{model.contractRef ? 'Reference in config.meta.uses · Compiled by the CDO semantic compiler' : 'Independent team model: no CDO inheritance declared'}</small>
+        <small>{model.contractRef ? 'Definitions inherited from the approved contract version' : 'Independent team model: no CDO inheritance declared'}</small>
       </div>
     </div>
     {model.contractError && <p className="team-error"><AlertCircle size={17}/>{model.contractError}</p>}
@@ -73,7 +73,7 @@ function ModelDetails({ model }) {
     </section>
     <section className="team-detail-section">
       <h3>Team-owned columns <span>{model.teamColumns.length}</span></h3>
-      <p>Columns explicitly defined by this team in its authored dbt YAML, not inherited from CDO.</p>
+      <p>Columns defined by this team, not inherited from CDO.</p>
       <DefinitionTable headings={['Column', 'Data type', 'Description']} rows={model.teamColumns}
         empty="No team-owned columns declared"
         renderRows={(column,i) => <tr key={`${column.name}-${i}`}><td><strong>{column.name}</strong></td><td>{identifier(column.data_type)}</td><td>{identifier(column.description)}</td></tr>}/>
@@ -85,7 +85,7 @@ function ModelDetails({ model }) {
         empty="No team-owned metrics declared"
         renderRows={(metric,i) => <tr key={`${metric.name}-${i}`}><td><strong>{metric.name}</strong>{metric.label && <small>{metric.label}</small>}</td><td>{identifier(metric.type)} / {identifier(metric.agg)}</td><td>{identifier(metric.expr)}</td><td>{identifier(metric.description)}</td></tr>}/>
     </section>
-    <p className="team-demo-note">Authored model is stored in the portal; its compiled native YAML is published only after dbt Core validation.</p>
+    <p className="team-demo-note">Model definitions are stored in the portal and published after validation.</p>
   </div>
 }
 
@@ -140,15 +140,15 @@ export default function TeamWorkspace({ role }) {
     <main className="team-dashboard">
       <div className="team-dashboard-title">
         <div><span className="team-label">PORTAL-OWNED SEMANTIC MODELS</span><h1>{workspace?.label} Workspace</h1>
-          <p>{workspace?.description} · Create staging and semantic models here, validate with dbt Core, then publish to a configured dbt project.</p></div>
+          <p>{workspace?.description} · Create staging and semantic models, inherit CDO definitions, validate, and publish—all in one place.</p></div>
         <div className="team-dashboard-actions"><button type="button" className="primary team-create-button" disabled={loading||Boolean(error)} onClick={()=>{setEditing(null);setCreating(true)}}><Plus size={15}/> Create Semantic Model</button>
         <button type="button" className="outline" disabled={loading} onClick={() => setGeneration(v => v + 1)}>
-          <RefreshCw size={15}/>{loading ? 'Loading...' : 'Refresh portal drafts'}
+          <RefreshCw size={15}/>{loading ? 'Loading...' : 'Refresh models'}
         </button></div>
       </div>
-      <div className="team-repository-line"><Database size={17}/><span>Source: <strong>Python portal backend</strong> · dbt Core: {dbtStatus?.dbtCoreAvailable?'installed':'not detected'} · dbt project: {dbtStatus?.localProjectConfigured?'configured':'not configured'} · dbt Cloud Admin: {dbtStatus?.remoteAdminConfigured?'configured':'not configured'} · CDO contracts: approved registry</span></div>
-      {loading && <div className="team-loading" role="status">Loading portal drafts and approved CDO contracts…</div>}
-      {error && <div className="team-error" role="alert"><AlertCircle size={18}/>Unable to load portal models or CDO registry: {error}. <button onClick={() => setGeneration(v => v + 1)}>Retry</button></div>}
+      <div className="team-repository-line" role="status"><Database size={17}/><span><strong>{dbtStatus?.workspaceReady ? 'Model workspace ready' : 'Preparing model workspace'}</strong> · {dbtStatus?.validationReady ? 'Validation service available' : 'Validation service unavailable — contact the administrator'} · Approved CDO contracts available</span></div>
+      {loading && <div className="team-loading" role="status">Loading your models and approved contracts…</div>}
+      {error && <div className="team-error" role="alert"><AlertCircle size={18}/>Unable to load your workspace: {error}. <button onClick={() => setGeneration(v => v + 1)}>Retry</button></div>}
       {!loading && !error && !models.length && <div className="team-empty">No portal-authored models yet. Create a staging and semantic model to get started.</div>}
       {!loading && !error && models.length > 0 && <section className="team-detail-section">
         <h3>Portal models and drafts <span>{models.length}</span></h3>
@@ -170,7 +170,7 @@ export default function TeamWorkspace({ role }) {
         </div>
         <ModelDetails model={currentModel}/>
       </>}
-      <p className="team-demo-note">Team drafts are local to our Python backend; they are not read from or synchronized with federated-semantic-poc. Publishing writes to DBT_PROJECT_PATH only after dbt Core validation. Role selection remains a prototype, not production authentication.</p>
+      <p className="team-demo-note">Your drafts and published definitions stay in this portal workspace. Remote deployment is not enabled yet. Role selection remains a development prototype.</p>
     </main>
   </div>
 }

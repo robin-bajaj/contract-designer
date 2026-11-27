@@ -26,13 +26,12 @@ class PortalTests(unittest.TestCase):
         self.temp=tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         base=Path(self.temp.name)
-        self.project=base/"target_project"
-        self.project.mkdir()
-        (self.project/"dbt_project.yml").write_text("name: portal_poc\nprofile: portal_poc\n")
         patcher=patch.dict("os.environ",{"PORTAL_DB_PATH":str(base/"portal.sqlite"),
-                                         "DBT_PROJECT_PATH":str(self.project)})
+                                         "DBT_PROJECT_PATH":""})
         patcher.start()
         self.addCleanup(patcher.stop)
+        self.project=portal.project_path()
+        self.assertTrue((self.project/"dbt_project.yml").exists())
 
     def test_save_incomplete_draft_then_resume(self):
         draft=portal.save_draft({"role":"team-a","sourceModel":"team_a_new","semanticName":"",
@@ -72,12 +71,14 @@ class PortalTests(unittest.TestCase):
         with self.assertRaisesRegex(portal.PortalError,"another team's draft"):
             portal.save_draft({**payload("team-c"),"id":saved["id"]})
 
-    def test_no_valid_db_project_rejects_publication(self):
+    def test_no_manual_project_configuration_needed_to_publish(self):
         saved=portal.save_draft(payload())
         portal.mark_validated(saved["id"],{"ok":True,"compiledYaml":YAML})
-        with patch.dict("os.environ",{"DBT_PROJECT_PATH":""}):
-            with self.assertRaisesRegex(portal.PortalError,"DBT_PROJECT_PATH"):
-                portal.publish_draft(saved["id"])
+        with patch.dict("os.environ",{"DBT_PROJECT_PATH":"/tmp/old-project-is-ignored"}):
+            result=portal.publish_draft(saved["id"])
+        self.assertEqual(result["status"],"published-local")
+        self.assertTrue((self.project/"models/staging/team_a/team_a_new.sql").is_file())
+
 
     def test_published_sql_is_discoverable_as_source(self):
         saved=portal.save_draft(payload())

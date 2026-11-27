@@ -24,13 +24,14 @@ class FastValidationTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.project = Path(self.temp.name) / "dbtproject"
-        self.project.mkdir()
-        (self.project / "dbt_project.yml").write_text("name: portal_poc\nversion: '1.0'\nprofile: portal_poc\nmodel-paths: ['models']\n")
-        (self.project / "models").mkdir()
-        patcher = patch.dict("os.environ", {"DBT_PROJECT_PATH": str(self.project)})
+        from server.team_portal import project_path
+        patcher = patch.dict("os.environ", {
+            "PORTAL_DB_PATH": str(Path(self.temp.name) / "portal.sqlite3"),
+            "DBT_PROJECT_PATH": "",
+        })
         patcher.start()
         self.addCleanup(patcher.stop)
+        self.project = project_path()
 
     def test_accepts_payload(self):
         self.assertEqual(validate_payload(PAYLOAD)["team"],"team_a")
@@ -53,7 +54,7 @@ class FastValidationTests(unittest.TestCase):
                 self.assertEqual((project/"models/semantic_models/team_a/new_team_a_semantics.yml").read_text(),YAML)
                 (project/"target").mkdir()
                 (project/"target/manifest.json").write_text("{}")
-                self.assertIn("portal_poc:",(project/".ci/profiles.yml").read_text())
+                self.assertIn("semantic_portal:",(project/".ci/profiles.yml").read_text())
             return "ok"
         with patch("server.fast_validate.shutil.which",return_value="/usr/bin/dbt"):
             result=validate_dbt(PAYLOAD,runner=runner)
@@ -101,11 +102,22 @@ class FastValidationTests(unittest.TestCase):
         self.assertTrue(result["ok"],result)
         self.assertEqual(seen,["dbt Core parse"])
 
-    def test_requires_configured_target_project(self):
-        with patch.dict("os.environ",{"DBT_PROJECT_PATH":""}):
-            result=validate_dbt(PAYLOAD)
-        self.assertFalse(result["ok"])
-        self.assertIn("DBT_PROJECT_PATH",result["error"])
+    def test_validation_auto_provisions_workspace_without_environment_setup(self):
+        with patch.dict("os.environ",{"DBT_PROJECT_PATH":"/nonexistent/old-project"}):
+            self.assertTrue((self.project/"dbt_project.yml").is_file())
+            self.assertTrue((self.project/"models/groups.yml").is_file())
+        steps=[]
+        def runner(name,argv,cwd,env=None,timeout=65):
+            steps.append(name)
+            if name=="dbt Core parse":
+                folder=Path(cwd)/"target"
+                folder.mkdir()
+                (folder/"manifest.json").write_text("{}")
+            return "ok"
+        with patch("server.fast_validate.shutil.which",return_value="/usr/bin/dbt"):
+            result=validate_dbt(PAYLOAD,runner=runner)
+        self.assertTrue(result["ok"],result)
+        self.assertEqual(steps,["dbt Core parse"])
 
 if __name__=="__main__":
     unittest.main()

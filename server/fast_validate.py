@@ -132,7 +132,7 @@ def check_staging_sql(sql: str) -> None:
 
 
 def validate_dbt(payload: object, *, runner=run_command) -> dict:
-    """Checkout, overlay unsaved edits, compile CDO, parse with dbt Core. Never commit."""
+    """Overlay unsaved edits on a snapshot of the managed project and parse with dbt."""
     data = validate_payload(payload)
     steps: list[dict] = []
     if data["stage_only"] and data["mode"] == "new":
@@ -147,19 +147,18 @@ def validate_dbt(payload: object, *, runner=run_command) -> dict:
         project, gov = root / "project", root / "governance"
         try:
             source = team_portal.project_path()
-            if not source or not (source / "dbt_project.yml").is_file():
-                raise InputError("Set DBT_PROJECT_PATH to the actual target dbt project before dbt validation")
-            # Project files come only from the separately configured dbt project.
-            # No team files are loaded from or published to federated-semantic-poc.
+            if not (source / "dbt_project.yml").is_file():
+                raise InputError("Model workspace could not initialize; contact the administrator")
+            # Team models live in our managed project; never pull from federated-semantic-poc.
             shutil.copytree(source, project, ignore=shutil.ignore_patterns(".git", "target", "logs", ".venv", ".portal"))
-            steps.append({"name": "Load configured dbt project", "status": "passed"})
+            steps.append({"name": "Load model workspace", "status": "passed"})
             yaml_path = (project / "models" / "semantic_models" / data["team"] / (data["semantic"] + ".yml")) if not data["stage_only"] else None
             sql_path = project / "models" / "staging" / data["team"] / (data["source"] + ".sql")
             if not data["stage_only"] and yaml_path.exists():
-                raise InputError(f"{yaml_path.name} already exists in target dbt project; choose a new semantic model name")
+                raise InputError(f"{yaml_path.name} already exists in the workspace; choose another semantic model name")
             if data["mode"] == "new":
                 if sql_path.exists():
-                    raise InputError(f"{sql_path.name} already exists in target dbt project; choose another model name")
+                    raise InputError(f"{sql_path.name} already exists in the workspace; choose another model name")
                 sql_path.parent.mkdir(parents=True, exist_ok=True)
                 sql_path.write_text(data["sql"], encoding="utf-8")
             elif not sql_path.is_file():
@@ -297,15 +296,18 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if path == "/api/health":
                 self.send_json(200, {"status": "ready", "engine": "dbt-core",
-                                     "projectConfigured": bool(team_portal.project_path())})
+                                     "workspaceReady": (team_portal.project_path() / "dbt_project.yml").is_file()})
             elif path == "/api/dbt/status":
                 project = team_portal.project_path()
                 self.send_json(200, {
+                    "workspaceReady": (project / "dbt_project.yml").is_file(),
+                    "validationReady": bool(shutil.which("dbt")),
+                    "publishingMode": "portal-managed-local",
+                    # Backwards-compatible fields for existing dashboard clients.
                     "dbtCoreAvailable": bool(shutil.which("dbt")),
-                    "localProjectConfigured": bool(project and (project / "dbt_project.yml").is_file()),
+                    "localProjectConfigured": True,
                     "remoteAdminConfigured": dbt_cloud.configured(),
                     "remoteRunsEnabled": os.environ.get("DBT_CLOUD_ENABLE_RUNS") == "1",
-                    "publishingMode": "local-dbt-project-only",
                 })
             elif path == "/api/team-models":
                 role = parse_qs(parsed.query).get("role", [""])[0]
@@ -341,7 +343,10 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
-    print(f"Fast Validate development backend at http://{HOST}:{PORT}", flush=True)
+    # Provision once when the local backend starts; subsequent calls are
+    # idempotent. Users never need to create or configure a dbt project.
+    project = team_portal.project_path()
+    print(f"Semantic portal backend at http://{HOST}:{PORT} (managed project: {project})", flush=True)
     ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()
 
 

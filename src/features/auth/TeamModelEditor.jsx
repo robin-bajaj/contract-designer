@@ -99,16 +99,16 @@ export default function TeamModelEditor({role,contracts,sourceModels,onBack,init
   return <div className="team-editor">
     <div className="team-editor-heading">
       <button type="button" className="outline" onClick={onBack}><ArrowLeft size={15}/> Back to models</button>
-      <div><span className="team-label">NEW SEMANTIC IMPLEMENTATION</span><h2>Create a team semantic model</h2><p>Create staging SQL, inherit governed CDO definitions and validate with dbt Core in our Python backend.</p></div>
+      <div><span className="team-label">NEW SEMANTIC IMPLEMENTATION</span><h2>Create a team semantic model</h2><p>Create a staging model, inherit approved CDO definitions, and validate your model—all here.</p></div>
     </div>
 
     <div className="team-editor-form team-editor-split-layout">
       <div className="team-editor-fields">
       <section>
-        <h3>1. dbt source model</h3>
+        <h3>1. Staging model</h3>
         <label>Starting point
           <select value={draft.sourceMode} onChange={e=>{setDraft(current=>({...current,sourceMode:e.target.value,sourceModel:'',sourceSql:''}));setResult(null);setValidationResult(null)}}>
-            <option value="new">Create a new SQL model</option>
+            <option value="new">Create a new staging model</option>
             <option value="existing">Use an existing team SQL model</option>
           </select>
         </label>
@@ -118,15 +118,15 @@ export default function TeamModelEditor({role,contracts,sourceModels,onBack,init
             {sourceModels.map(name=><option key={name} value={name}>{name}</option>)}
           </select>
         </label> : <>
-          <label>New dbt SQL filename (without .sql)
+          <label>Staging model name
             <input value={draft.sourceModel} onChange={e=>setField('sourceModel',e.target.value)} placeholder={role==='team-a'?'team_a_new_positions':'team_c_new_positions'}/>
           </label>
-          <label>SQL select statement (authored dbt source)
+          <label>Staging SQL editor
             <textarea value={draft.sourceSql} onChange={e=>setField('sourceSql',e.target.value)} spellCheck={false} rows={7}
               placeholder={`select\n  position_id,\n  report_date,\n  profit_loss,\n  instrument_code\nfrom {{ ref('stg_${role==='team-a'?'team_a':'team_c'}_positions') }}`}/>
           </label>
           <LiveStagingStatus role={role} sourceModel={draft.sourceModel} sourceSql={draft.sourceSql}/>
-          <p className="team-editor-note">Your SQL is stored as a portal draft. Validation runs against the configured dbt project; dbt parse does not execute SQL.</p>
+          <p className="team-editor-note">Your work is saved in the portal. Automatic checks review model structure, but do not execute SQL against the database.</p>
         </>}
       </section>
 
@@ -200,40 +200,40 @@ export default function TeamModelEditor({role,contracts,sourceModels,onBack,init
         </tbody></table></div>
       </section>
       <section>
-        <h3>6. Save, validate and publish to dbt</h3>
+        <h3>6. Save, validate and publish</h3>
         {issues.length?<div className="team-validation-errors"><strong>Resolve these before publishing:</strong><ul>{issues.map((issue,i)=><li key={i}>{issue}</li>)}</ul></div>
-          : <p className="team-validation-ok"><CheckCircle2 size={16}/> Local structural checks passed. dbt CI remains authoritative.</p>}
-        <p className="team-editor-note">Portal drafts are stored in the local Python backend, not GitHub. Publishing requires successful dbt Core validation and a configured DBT_PROJECT_PATH.</p>
+          : <p className="team-validation-ok"><CheckCircle2 size={16}/> Initial form checks passed. Run validation before publishing.</p>}
+        <p className="team-editor-note">Your drafts are saved automatically in the portal's private storage when you click Save Draft. Validate before publishing; no project setup is required.</p>
         <div className="team-editor-buttons">
-          <button type="button" className="outline" disabled={saving||validating} onClick={saveDraft}><Save size={15}/>{saving?'Saving…':'Save Portal Draft'}</button>
+          <button type="button" className="outline" disabled={saving||validating} onClick={saveDraft}><Save size={15}/>{saving?'Saving…':'Save Draft'}</button>
           <button type="button" className="outline" disabled={!generated||validating} onClick={validateStaging}>
-            <PlayCircle size={15}/>{validating?'Validating in dbt Core…':'Validate with dbt Core'}
+            <PlayCircle size={15}/>{validating?'Validating…':'Validate Model'}
           </button>
           <button type="button" className="outline" disabled={!generated} onClick={()=>downloadYaml(`${draft.semanticName}.yml`,generated)}><Download size={15}/> Download YAML</button>
           <button type="button" className="primary" disabled={publishing||!saved?.id||validatedSignature!==snapshot} onClick={publish}>
-            <Rocket size={15}/>{publishing?'Publishing…':'Publish to dbt Project'}
+            <Rocket size={15}/>{publishing?'Publishing…':'Publish Model'}
           </button>
         </div>
         {validationResult && <div className={`team-dbt-results ${validationResult.ok?'passed':'failed'}`} role="status">
           <h4>{validationResult.ok?<CheckCircle2 size={17}/>:<AlertCircle size={17}/>}
-            {validationResult.ok?'dbt Core fast validation passed':'dbt Core fast validation did not pass'}</h4>
+            {validationResult.ok?'Model validation passed':'Model validation did not pass'}</h4>
           {validationResult.error && <p>{validationResult.error}</p>}
           {validationResult.steps?.length>0 && <ul>{validationResult.steps.map((step,index)=><li key={index}>
             {step.status==='passed'?<CheckCircle2 size={14}/>:<AlertCircle size={14}/>}
             {step.name} — {step.status}
           </li>)}</ul>}
           {validationResult.log && <details><summary>dbt / compiler output</summary><pre>{validationResult.log}</pre></details>}
-          <small>Parse-only: does not execute SQL, inspect Neon columns, or enforce physical database contracts.</small>
+          <small>Validation checks model structure and references; it does not execute SQL or verify physical column types.</small>
         </div>}
-        {saved?.id && <p className="team-validation-ok"><Save size={14}/> Draft stored in Python backend · {saved.status}</p>}
+        {saved?.id && <p className="team-validation-ok"><Save size={14}/> Draft saved to portal · {saved.status}</p>}
         {error && <p className="team-editor-error" role="alert">{error}</p>}
         {result && <p className="team-editor-success"><CheckCircle2 size={15}/> {result.message} · {result.paths?.join(', ')}</p>}
-        <p className="team-editor-note">Publishing writes native compiled YAML and staging SQL only to the configured local dbt project. It does not push Git changes or deploy to remote dbt Studio automatically.</p>
+        <p className="team-editor-note">Published models stay in the portal workspace. Deployment to an external environment is not connected yet.</p>
       </section>
       </div>
       <aside className="team-yaml-preview" aria-label="Live dbt YAML preview">
         <div className="team-yaml-preview-header">
-          <div><h3>Live YAML preview</h3><p>{draft.semanticName ? `${draft.semanticName}.yml` : 'New dbt semantic model'}</p></div>
+          <div><h3>Live YAML preview</h3><p>{draft.semanticName ? `${draft.semanticName}.yml` : 'New semantic model'}</p></div>
           <div className="team-yaml-preview-actions">
             <button type="button" className="outline" disabled={!generated} onClick={() => navigator.clipboard?.writeText(generated)}>Copy</button>
             <button type="button" className="outline" disabled={!generated} onClick={() => downloadYaml(`${draft.semanticName}.yml`,generated)}><Download size={14}/> Download</button>

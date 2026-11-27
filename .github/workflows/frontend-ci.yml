@@ -29,7 +29,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install backend unit-test dependency
-        run: python -m pip install 'PyYAML>=6,<7' 'sqlglot>=26,<29'
-      - name: Test dbt Core validation API orchestration (mocked subprocesses)
+      - name: Install Python backend and dbt Core for integration smoke test
+        run: python -m pip install -r server/requirements.txt
+      - name: Test Python portal, dbt Core validation and managed project provisioning
         run: python -m unittest discover -s server -p 'test_*.py'
