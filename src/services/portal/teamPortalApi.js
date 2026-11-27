@@ -25,8 +25,19 @@ export const listPortalSources=(role,fetchImpl=fetch)=>
 export const savePortalDraft=(draft,fetchImpl=fetch)=>
   request('/api/team-models/save','POST',draft,fetchImpl).then(result=>result.draft)
 
-export const validatePortalDraft=(id,fetchImpl=fetch)=>
-  request('/api/team-models/validate','POST',{id},fetchImpl)
+export async function validatePortalDraft(id,fetchImpl=fetch) {
+  let response
+  try {
+    response=await fetchImpl('/api/team-models/validate',{
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id}),
+    })
+  } catch { throw Error('Python backend is unavailable. Start npm run dev:api.') }
+  const result=await response.json().catch(()=>null)
+  // HTTP 422 means dbt parsing/compilation failed: return detailed steps/logs.
+  if(response.status===422 && typeof result?.ok==='boolean') return result
+  if(!response.ok||!result) throw Error(result?.error||`Backend HTTP ${response.status}`)
+  return result
+}
 
 export const publishPortalDraft=(id,fetchImpl=fetch)=>
   request('/api/team-models/publish','POST',{id},fetchImpl)
