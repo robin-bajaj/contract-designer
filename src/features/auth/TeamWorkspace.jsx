@@ -225,7 +225,7 @@ export default function TeamWorkspace({ role }) {
         {catalogError && <p className="team-error" role="alert">Unable to discover the connected project: {catalogError}</p>}
         {!catalogLoading && !catalogError && !connectedCatalog?.connection && <div className="dbt-editor-placeholder"><Database size={28}/><strong>Connect a dbt Cloud project</strong><span>Choose an existing project to browse its committed files.</span></div>}
         {connectedCatalog?.connection && <>
-          <header className="dbt-editor-project-bar">
+          <div className="dbt-editor-project-bar">
             <div className="dbt-editor-project-identity">
               <span className="dbt-project-mark"><Database size={19}/></span>
               <div>
@@ -239,7 +239,7 @@ export default function TeamWorkspace({ role }) {
               <span title="Current Git revision"><GitBranch size={13}/>{connectedCatalog.revision?.slice(0,7)||'—'}</span>
               <span className="dbt-readonly-pill">Read-only</span>
             </div>
-          </header>
+          </div>
           <div className="dbt-editor-file-toolbar">
             <div className="dbt-editor-file-path">
               {openedFile ? <><FileCode2 size={16}/><strong>{openedFile.path.split('/').at(-1)}</strong><small>{openedFile.path}</small></> :
