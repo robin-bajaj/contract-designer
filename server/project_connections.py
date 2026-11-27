@@ -238,15 +238,16 @@ def disconnect(role: str) -> None:
 
 
 def _safe_path(row: dict, candidate: str) -> bool:
+    if not isinstance(candidate, str) or any(
+        segment in (".", "..", "") for segment in candidate.split("/")
+    ) or chr(92) in candidate:
+        return False
     prefix = row["subdirectory"] + "models/"
     team = TEAM_PREFIX[row["role"]]
     return (
-        isinstance(candidate, str)
-        and not any(segment in (".", "..", "") for segment in candidate.split("/"))
-        and "\\\\" not in candidate
-        and candidate.startswith(prefix + "staging/" + team + "/")
+        candidate.startswith(prefix + "staging/" + team + "/")
         or candidate.startswith(prefix + "semantic_models/" + team + "/")
-    ) and (candidate.endswith(".sql") or candidate.endswith(".yml") or candidate.endswith(".yaml"))
+    ) and candidate.endswith((".sql", ".yml", ".yaml"))
 
 
 def _tree(row: dict) -> tuple[list[dict], str]:
