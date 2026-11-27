@@ -1,30 +1,22 @@
-# Team Lead GitHub App connection (local POC)
+# Team Lead GitHub connection (local POC)
 
-The portal uses **one GitHub App** owned by the organization, not one personal access token per Team Lead.
+The Team Lead can connect the repository already linked through dbt Cloud using a **fine-grained GitHub personal access token**. A GitHub App is not necessary for this POC.
 
-## Platform setup (one-time)
+## Setup
 
-1. Register a GitHub App at GitHub Developer Settings. Select the desired repositories during installation.
-2. Grant **Repository permissions → Contents: Read-only** and **Metadata: Read-only**. No write or pull-request permission is requested in this milestone.
-3. Generate a private key. Keep it **outside the repository**, in a secrets manager in production. Local development may use a secure PEM file with `chmod 600`.
-4. Configure the backend process with `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, and `GITHUB_APP_PRIVATE_KEY_PATH`. These refer to the registered app and the secure file path, **not** a user's personal token. Example placeholders (do not commit real values):
+1. Open https://github.com/settings/personal-access-tokens/new.
+2. Select the GitHub resource owner that owns the linked dbt repository (for example `robin-bajaj`).
+3. Restrict **Repository access → Only select repositories** to `federated-semantic-poc`.
+4. Grant **Repository permissions → Contents: Read-only** (Metadata: Read-only is included).
+5. Prefer a short expiration and follow organizational token-approval requirements.
+6. In the local portal, open **Team A → Manage connections → GitHub repository access**, paste the token, and select **Connect GitHub**.
 
-   ```sh
-   export GITHUB_APP_ID="APP_ID"
-   export GITHUB_APP_SLUG="your-org-semantic-portal"
-   export GITHUB_APP_PRIVATE_KEY_PATH="/secure/location/github-app.pem"
-   npm run dev:api
-   ```
+The backend verifies the token against the linked repository and its Git tree before persisting it. It encrypts the token in the local SQLite database using the existing Fernet key file with 0600 permissions. The token is cleared from the browser form on success; it is never committed to Git or returned through an HTTP response. **Disconnect GitHub** clears the stored credential. No `PORTAL_GITHUB_READ_TOKEN` environment variable is required.
 
-Production should inject these values via its deployment/secret management system, not a checked-in `.env`.
+This connection enables read-only project explorer access, not Git commits, PR creation, or merge. The model publisher still writes only to a portal-managed local project.
 
-## Team Lead workflow
+## Security limitations
 
-1. Go to **Team workspace → Manage connections** and connect an existing dbt Cloud project.
-2. Under **GitHub repository access**, choose **Install / authorize GitHub App**. GitHub handles repository authorization in a separate tab.
-3. Return to the portal and click **Verify GitHub connection**. The backend checks the installation for the **exact repository** already verified through dbt Cloud, then persists only the installation ID.
-4. The project explorer now reads source using short-lived GitHub installation tokens obtained server-side. The UI receives no private key or installation access token.
+**This prototype is localhost-only, not production-ready.** The team role selector is not identity verification and any user with access to the local backend can access the role's repository files. Before deploying to multiple users, add SSO, backend-enforced RBAC, per-team credential authorization, CSRF protection, audit logging, managed secrets with envelope encryption, expiry/rotation handling and a separate workflow for pull request publishing. A GitHub App with short-lived credentials is preferable for a multi-user production deployment.
 
-**Constraints:** This is a loopback-only POC. The role picker is *not authentication*, and selecting Team A or Team C does not prove Team Lead identity. Production must add SSO, role authorization on every endpoint, and an auditable administrator-approved installation policy. GitHub App permissions are repo-level, not team-folder-level. Read-only repository browsing is enabled; commit, PR creation, approval, merge, and remote model publishing are **not implemented** in this PR.
-
-For support, a missing app setup displays an actionable message. No GitHub App key is committed. `PORTAL_GITHUB_READ_TOKEN` remains a legacy development fallback only.
+Do not commit tokens, place them in frontend environment files, or paste them into issue trackers.
