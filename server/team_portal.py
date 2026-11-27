@@ -53,6 +53,8 @@ def connect():
         draft_data TEXT,
         validated_digest TEXT,
         compiled_yaml TEXT,
+        validation_revision TEXT,
+        validated_repository TEXT,
         published_at TEXT,
         pr_url TEXT,
         pr_number INTEGER,
@@ -62,7 +64,8 @@ def connect():
     columns = {row[1] for row in conn.execute("PRAGMA table_info(drafts)")}
     if "draft_data" not in columns:
         conn.execute("ALTER TABLE drafts ADD COLUMN draft_data TEXT")
-    for column, sqltype in (("pr_url", "TEXT"), ("pr_number", "INTEGER")):
+    for column, sqltype in (("pr_url", "TEXT"), ("pr_number", "INTEGER"),
+                            ("validation_revision", "TEXT"), ("validated_repository", "TEXT")):
         if column not in columns:
             conn.execute(f"ALTER TABLE drafts ADD COLUMN {column} {sqltype}")
     return conn
@@ -121,6 +124,7 @@ def public(row: sqlite3.Row) -> dict:
         "draftData": json.loads(row["draft_data"] or "{}"),
         "publishedAt": row["published_at"], "updatedAt": row["updated_at"],
         "prUrl": row["pr_url"], "prNumber": row["pr_number"],
+        "validationRevision": row["validation_revision"],
     }
     try:
         current = digest(validate_input(item))
@@ -212,12 +216,15 @@ def save_draft(payload: object) -> dict:
             conn.execute("""UPDATE drafts SET source_model=?,semantic_name=?,source_mode=?,
                 source_sql=?,yaml_text=?,draft_data=?,validated_digest=CASE WHEN ?=? THEN validated_digest ELSE NULL END,
                 compiled_yaml=CASE WHEN ?=? THEN compiled_yaml ELSE NULL END,
+                validation_revision=CASE WHEN ?=? THEN validation_revision ELSE NULL END,
+                validated_repository=CASE WHEN ?=? THEN validated_repository ELSE NULL END,
                 published_at=CASE WHEN ?=? THEN published_at ELSE NULL END,
                 pr_url=CASE WHEN ?=? THEN pr_url ELSE NULL END,
                 pr_number=CASE WHEN ?=? THEN pr_number ELSE NULL END,
                 updated_at=? WHERE id=?""",
                 (data["sourceModel"], data["semanticName"], data["sourceMode"], data["sourceSql"],
                  data["yamlText"], json.dumps(draft_data), previous_digest, new_digest, previous_digest, new_digest,
+                 previous_digest, new_digest, previous_digest, new_digest,
                  previous_digest, new_digest, previous_digest, new_digest,
                  previous_digest, new_digest, now(), draft_id))
         else:
@@ -238,8 +245,9 @@ def mark_validated(draft_id: str, result: dict) -> dict:
     current_digest = digest(validate_input(draft))
     with connect() as conn:
         conn.execute("""UPDATE drafts SET validated_digest=?,compiled_yaml=?,published_at=NULL,
-                        pr_url=NULL,pr_number=NULL,updated_at=? WHERE id=?""",
-                     (current_digest, result["compiledYaml"], now(), draft_id))
+                        pr_url=NULL,pr_number=NULL,validation_revision=?,validated_repository=?,updated_at=? WHERE id=?""",
+                     (current_digest, result["compiledYaml"], result.get("validationRevision"),
+                      result.get("validatedRepository"), now(), draft_id))
     return load_draft(draft_id)
 
 
@@ -265,7 +273,7 @@ def publish_draft(draft_id: str) -> dict:
     draft = load_draft(draft_id)
     with connect() as conn:
         row = conn.execute(
-            "SELECT validated_digest, compiled_yaml, pr_url FROM drafts WHERE id=?",
+            "SELECT validated_digest, compiled_yaml, validation_revision, validated_repository, pr_url FROM drafts WHERE id=?",
             (draft_id,)
         ).fetchone()
     current_digest = digest(validate_input(draft))
@@ -273,7 +281,11 @@ def publish_draft(draft_id: str) -> dict:
         raise PortalError("Validate the latest draft with dbt Core before publishing", 409)
     if row["pr_url"]:
         raise PortalError("Draft was already submitted to GitHub: " + row["pr_url"], 409)
-    result = github_publish.publish(draft, row["compiled_yaml"])
+    if not row["validation_revision"] or not row["validated_repository"]:
+        raise PortalError("Validate against the connected GitHub dbt project before publishing", 409)
+    result = github_publish.publish(draft, draft["yamlText"],
+                                   expected_revision=row["validation_revision"],
+                                   expected_repository=row["validated_repository"])
     with connect() as conn:
         conn.execute(
             "UPDATE drafts SET published_at=?,pr_url=?,pr_number=?,updated_at=? WHERE id=?",
