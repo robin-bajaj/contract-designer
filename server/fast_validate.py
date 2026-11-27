@@ -245,6 +245,30 @@ def validate_dbt(payload: object, *, runner=run_command) -> dict:
             return {"ok": False, "steps": steps, "log": str(exc), "error": str(exc), "mode": "parse-only"}
 
 
+ONBOARDING_PATHS = frozenset({
+    "/api/lead/dbt/projects", "/api/lead/dbt/preview", "/api/lead/dbt/connect",
+})
+
+
+def local_onboarding_request_allowed(client_ip: str, host: str, origin: str | None) -> bool:
+    """Localhost POC guard, not production authentication.
+
+    Vite forwards Host unchanged from localhost:5173, while clients that
+    call Python directly use localhost:8765. Never accept remote clients,
+    DNS-rebound Host values, or foreign web origins when receiving a dbt token.
+    """
+    if client_ip not in ("127.0.0.1", "::1"):
+        return False
+    hosts = {"localhost:5173", "127.0.0.1:5173",
+             f"localhost:{PORT}", f"127.0.0.1:{PORT}"}
+    if host not in hosts:
+        return False
+    if origin is not None and origin not in ("http://localhost:5173", "http://127.0.0.1:5173",
+                                               f"http://localhost:{PORT}", f"http://127.0.0.1:{PORT}"):
+        return False
+    return True
+
+
 class Handler(BaseHTTPRequestHandler):
     """Loopback-only POC gateway: portal drafts, dbt Core, dbt Cloud metadata."""
 
@@ -257,6 +281,11 @@ class Handler(BaseHTTPRequestHandler):
                    "/api/lead/dbt/preview", "/api/lead/dbt/connect"}
         if path not in allowed:
             self.send_error(404)
+            return
+        if path in ONBOARDING_PATHS and not local_onboarding_request_allowed(
+            self.client_address[0], self.headers.get("Host", ""), self.headers.get("Origin")
+        ):
+            self.send_json(403, {"ok": False, "error": "dbt onboarding is available only from the local portal"})
             return
         try:
             count = int(self.headers.get("Content-Length", "0"))
@@ -279,15 +308,15 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if path == "/api/lead/dbt/projects":
                 result = project_connections.preview_account(
-                    payload.get("role"), self.headers.get("X-Portal-Lead-Key"), payload)
+                    payload.get("role"), payload)
                 self.send_json(200, {"ok": True, **result})
             elif path == "/api/lead/dbt/preview":
                 project = project_connections.preview_project(
-                    payload.get("role"), self.headers.get("X-Portal-Lead-Key"), payload)
+                    payload.get("role"), payload)
                 self.send_json(200, {"ok": True, "project": project})
             elif path == "/api/lead/dbt/connect":
                 connection = project_connections.assign(
-                    payload.get("role"), self.headers.get("X-Portal-Lead-Key"), payload)
+                    payload.get("role"), payload)
                 self.send_json(200, {"ok": True, "connection": connection})
             elif path == "/api/team-models/save":
                 self.send_json(200, {"ok": True, "draft": team_portal.save_draft(payload)})

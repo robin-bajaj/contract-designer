@@ -3,21 +3,20 @@ import assert from 'node:assert/strict'
 import {leadDiscoverProjects,leadPreviewProject,leadConnectProject,teamConnectedModels,teamConnectedFile} from './projectConnectionApi.js'
 
 const credentials={role:'team-a',apiHost:'cloud.getdbt.com',accountId:123,serviceToken:'test-token'}
-const key='team-a-lead-code'
 
-test('the team lead supplies dbt credentials through POST only, with a server-checked key',async()=>{
+test('dbt credentials use POST only without a separate Team Lead access code',async()=>{
   const calls=[]
   const fake=async(url,options)=>{
     calls.push({url,options})
     return {ok:true,json:async()=>({ok:true,projects:[{id:17,name:'Equity'}],project:{id:17},connection:{role:'team-a'}})}
   }
-  await leadDiscoverProjects(key,credentials,fake)
-  await leadPreviewProject(key,{...credentials,projectId:17},fake)
-  await leadConnectProject(key,{...credentials,projectId:17,environmentId:101},fake)
+  await leadDiscoverProjects(credentials,fake)
+  await leadPreviewProject({...credentials,projectId:17},fake)
+  await leadConnectProject({...credentials,projectId:17,environmentId:101},fake)
   assert.deepEqual(calls.map(x=>x.url),['/api/lead/dbt/projects','/api/lead/dbt/preview','/api/lead/dbt/connect'])
   for (const call of calls) {
     assert.equal(call.options.method,'POST')
-    assert.equal(call.options.headers['X-Portal-Lead-Key'],key)
+    assert.equal(call.options.headers['X-Portal-Lead-Key'],undefined)
     assert.match(call.options.body,/test-token/)
     assert.doesNotMatch(call.url,/test-token/)
     assert.equal(call.options.cache,'no-store')

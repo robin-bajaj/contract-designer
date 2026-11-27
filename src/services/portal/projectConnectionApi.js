@@ -1,14 +1,12 @@
-/** Team Lead-supplied dbt details are sent only to the local Python backend.
- * The lead's access code and service token are kept in component memory,
- * never persisted to browser storage or placed in a query string.
+/** Team-provided dbt details go only to the loopback Python backend.
+ * Service tokens are kept in component memory, not browser storage or URLs.
  */
-async function call(url,{data=null,leadKey=null,fetchImpl=fetch}={}) {
+async function call(url,{data=null,fetchImpl=fetch}={}) {
   let response
   try {
     response=await fetchImpl(url,{
       method:data!==null?'POST':'GET',
       headers:{
-        ...(leadKey!==null?{'X-Portal-Lead-Key':leadKey}:{}),
         ...(data!==null?{'Content-Type':'application/json'}:{}),
       },
       ...(data!==null?{body:JSON.stringify(data)}:{}),
@@ -21,12 +19,12 @@ async function call(url,{data=null,leadKey=null,fetchImpl=fetch}={}) {
   if(!response.ok || !result) throw Error(result?.error||`Backend HTTP ${response.status}`)
   return result
 }
-export const leadDiscoverProjects=(leadKey,details,fetchImpl=fetch)=>
-  call('/api/lead/dbt/projects',{data:details,leadKey,fetchImpl})
-export const leadPreviewProject=(leadKey,details,fetchImpl=fetch)=>
-  call('/api/lead/dbt/preview',{data:details,leadKey,fetchImpl})
-export const leadConnectProject=(leadKey,details,fetchImpl=fetch)=>
-  call('/api/lead/dbt/connect',{data:details,leadKey,fetchImpl})
+export const leadDiscoverProjects=(details,fetchImpl=fetch)=>
+  call('/api/lead/dbt/projects',{data:details,fetchImpl})
+export const leadPreviewProject=(details,fetchImpl=fetch)=>
+  call('/api/lead/dbt/preview',{data:details,fetchImpl})
+export const leadConnectProject=(details,fetchImpl=fetch)=>
+  call('/api/lead/dbt/connect',{data:details,fetchImpl})
 
 export const teamConnectedModels=(role,fetchImpl=fetch)=>
   call(`/api/team-models/connected?role=${encodeURIComponent(role)}`,{fetchImpl})

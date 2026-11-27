@@ -8,20 +8,19 @@ const admin=read('./ProjectConnectionsAdmin.jsx')
 const workspace=read('./TeamWorkspace.jsx')
 const backend=read('../../../server/fast_validate.py')
 
-test('Team A/C leads configure dbt inside team workspace; CDO cannot authorize it',()=>{
+test('Team A/C members configure dbt inside workspace without a lead code',()=>{
   assert.match(workspace,/setConnecting\(true\)/)
   assert.match(workspace,/Team Lead: Connect dbt Project/)
   assert.match(workspace,/ProjectConnectionsAdmin role=\{role\}/)
-  assert.match(admin,/Team Lead access code/)
   assert.match(admin,/dbt Cloud account ID/)
   assert.match(admin,/dbt Cloud service token/)
   assert.match(admin,/dbt Cloud API host/)
-  assert.match(backend,/X-Portal-Lead-Key/)
-  assert.doesNotMatch(backend,/X-Portal-Admin-Key/)
+  assert.doesNotMatch(backend,/X-Portal-Lead-Key/)
+  assert.match(backend,/local_onboarding_request_allowed/)
+  assert.doesNotMatch(admin,/Lead access code/)
 })
-test('Team Lead secrets are erased after save and never stored in browser storage',()=>{
+test('service token is erased after save and never stored in browser storage',()=>{
   assert.match(admin,/setServiceToken\(''\)/)
-  assert.match(admin,/setLeadKey\(''\)/)
   assert.doesNotMatch(admin,/localStorage|sessionStorage|document\.cookie/)
 })
 test('team workspace still displays existing Git SQL and YAML read-only',()=>{
