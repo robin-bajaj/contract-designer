@@ -74,6 +74,9 @@ def github(path):
     if "/contents/" in path and FILE_A in path:
         return {"type": "file", "encoding": "base64",
                 "content": base64.b64encode(YAML.encode()).decode()}
+    if "/contents/" in path and FILE_C in path:
+        return {"type": "file", "encoding": "base64",
+                "content": base64.b64encode(b"not: [valid yaml").decode()}
     raise AssertionError(f"Unexpected GitHub API path {path}")
 
 
