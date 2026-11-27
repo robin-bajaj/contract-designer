@@ -6,6 +6,7 @@ import { listPortalModels, listPortalSources, dbtBackendStatus } from '../../ser
 import { teamConnectedModels, teamConnectedFile } from '../../services/portal/projectConnectionApi.js'
 import { fetchGovernanceContracts } from '../../services/github/githubRegistry.js'
 import TeamModelEditor from './TeamModelEditor.jsx'
+import ProjectConnectionsAdmin from './ProjectConnectionsAdmin.jsx'
 import { describeTeamSemanticModel } from '../../domain/semantics/teamModelView.js'
 import './TeamWorkspace.css'
 
@@ -96,6 +97,7 @@ export default function TeamWorkspace({ role }) {
   const [contracts, setContracts] = useState([])
   const [sourceModels,setSourceModels] = useState([])
   const [creating,setCreating] = useState(false)
+  const [connecting,setConnecting] = useState(false)
   const [editing,setEditing] = useState(null)
   const [dbtStatus,setDbtStatus] = useState(null)
   const [connectedCatalog,setConnectedCatalog] = useState(null)
@@ -159,6 +161,9 @@ export default function TeamWorkspace({ role }) {
   }), [models, contracts, role])
   const currentModel = presentations.find(model => model.id === selectedId) || presentations[0]
 
+  if (connecting) return <ProjectConnectionsAdmin role={role}
+    onBack={()=>{setConnecting(false);setGeneration(current=>current+1)}}/>
+
   if (creating) return <div className="team-page"><TeamModelEditor key={editing?.id||'new'} role={role} contracts={contracts}
     sourceModels={sourceModels} initialDraft={editing}
     onBack={()=>{setCreating(false);setEditing(null);setGeneration(value=>value+1)}}/></div>
@@ -168,7 +173,8 @@ export default function TeamWorkspace({ role }) {
       <div className="team-dashboard-title">
         <div><span className="team-label">PORTAL-OWNED SEMANTIC MODELS</span><h1>{workspace?.label} Workspace</h1>
           <p>{workspace?.description} · Create staging and semantic models, inherit CDO definitions, validate, and publish—all in one place.</p></div>
-        <div className="team-dashboard-actions"><button type="button" className="primary team-create-button" disabled={loading||Boolean(error)} onClick={()=>{setEditing(null);setCreating(true)}}><Plus size={15}/> Create Semantic Model</button>
+        <div className="team-dashboard-actions"><button type="button" className="outline" disabled={loading} onClick={()=>setConnecting(true)}><GitBranch size={15}/> Team Lead: Connect dbt Project</button>
+        <button type="button" className="primary team-create-button" disabled={loading||Boolean(error)} onClick={()=>{setEditing(null);setCreating(true)}}><Plus size={15}/> Create Semantic Model</button>
         <button type="button" className="outline" disabled={loading} onClick={() => setGeneration(v => v + 1)}>
           <RefreshCw size={15}/>{loading ? 'Loading...' : 'Refresh models'}
         </button></div>
