@@ -19,7 +19,9 @@ def project(c,p):
     return {"data":{"id":p,"name":"Equity dbt","repository_id":41,"connection_id":21}}
 def environments(c,p):
     return {"data":[{"id":101,"project_id":p,"name":"Dev"},{"id":102,"project_id":999,"name":"Other"}]}
-def repository(c,p):
+def repository(c, project_id, repository_id):
+    assert project_id == 17
+    assert repository_id == 41
     return {"data":{"full_name":"robin-bajaj/federated-semantic-poc"}}
 def github(path):
     import base64
