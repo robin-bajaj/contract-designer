@@ -52,7 +52,7 @@ def app_jwt(app_id: str, pem: str, *, now: int | None = None) -> str:
 
 
 def github_request(endpoint: str, token: str, *, method: str = "GET", body: dict | None = None) -> dict:
-    if not endpoint.startswith("/") or ".." in endpoint or any(c in endpoint for c in "\\r\\n\\"):
+    if not endpoint.startswith("/") or ".." in endpoint or any(ord(c) < 32 or c == chr(92) for c in endpoint):
         raise AppError("Unsafe GitHub endpoint")
     request = Request(
         "https://api.github.com" + endpoint, method=method,
@@ -146,8 +146,9 @@ def execute_event(event: dict) -> dict:
     # Reject stale deliveries: never report success for a replaced PR head.
     pr = github_request(f"/repos/{event['repository']}/pulls/{event['pr']}", token)
     if ((pr.get("head") or {}).get("sha") != event["sha"]
-            or (pr.get("head") or {}).get("ref") != "portal/" + central_ci.team_ids.folder(event["role"]) +
-            "/" + (pr.get("head") or {}).get("ref", "").split("/")[-1]):
+            or not str((pr.get("head") or {}).get("ref", "")).startswith(
+                "portal/" + central_ci.team_ids.folder(event["role"]) + "/")
+            or (pr.get("base") or {}).get("ref") != central_ci.project_connections.connection_for(event["role"])["branch"]):
         return {"ok": False, "error": "PR commit or team branch changed; enqueue latest commit"}
     check_run(token, event, "in_progress")
     try:
