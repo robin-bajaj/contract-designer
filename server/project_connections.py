@@ -196,7 +196,10 @@ def _connected_repo(project: dict, cred: dict) -> str:
     repository_id = project.get("repository_id")
     if type(repository_id) is not int or repository_id <= 0:
         raise team_portal.PortalError("Connect a GitHub repository to the dbt project first", 422)
-    data = dbt_cloud.connected_repository(cred, repository_id).get("data")
+    project_id = project.get("id")
+    if type(project_id) is not int or project_id <= 0:
+        raise team_portal.PortalError("The dbt project identifier is missing", 502)
+    data = dbt_cloud.connected_repository(cred, project_id, repository_id).get("data")
     if not isinstance(data, dict):
         raise team_portal.PortalError("Could not read the dbt project's Git repository", 502)
     return _repo_name(data)

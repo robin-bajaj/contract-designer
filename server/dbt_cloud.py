@@ -127,7 +127,7 @@ def connection_request(credentials: dict, resource: str, *, opener=None) -> dict
     token = credentials.get("token")
     if type(account_id) is not int or account_id <= 0 or not isinstance(token, str) or not token.strip():
         raise DbtCloudError("Provide an account ID and service token")
-    prefix = f"/api/v2/accounts/{account_id}/"
+    prefix = f"/api/v3/accounts/{account_id}/"
     if not resource.startswith(prefix) or any(c in resource for c in ("#", "\\", "\r", "\n")):
         raise DbtCloudError("dbt endpoint is not authorized for this account")
     if len(resource) > 300:
@@ -146,6 +146,12 @@ def connection_request(credentials: dict, resource: str, *, opener=None) -> dict
             raise DbtCloudError("dbt API redirected; verify the API Access URL") from exc
         if exc.code in (401, 403):
             raise DbtCloudError("dbt rejected the service token or its permissions") from exc
+        if exc.code == 404:
+            raise DbtCloudError(
+                "dbt did not find the requested account or resource (HTTP 404). "
+                "Verify the numeric Account ID from dbt Account settings (not a project/user ID), "
+                "the exact API Access hostname, and that the token belongs to that account."
+            ) from exc
         raise DbtCloudError(f"dbt returned HTTP {exc.code}") from exc
     except (URLError, TimeoutError) as exc:
         raise DbtCloudError("Cannot connect to the selected dbt account") from exc
@@ -155,22 +161,27 @@ def connection_request(credentials: dict, resource: str, *, opener=None) -> dict
 
 
 def connected_projects(credentials: dict) -> dict:
-    return connection_request(credentials, f"/api/v2/accounts/{credentials['accountId']}/projects/")
+    """dbt Administrative API v3 lists projects available to the account token."""
+    return connection_request(credentials, f"/api/v3/accounts/{credentials['accountId']}/projects/")
 
 
 def connected_project(credentials: dict, project_id: int) -> dict:
     if type(project_id) is not int or project_id < 1:
         raise DbtCloudError("Invalid dbt project ID")
-    return connection_request(credentials, f"/api/v2/accounts/{credentials['accountId']}/projects/{project_id}/")
+    return connection_request(credentials, f"/api/v3/accounts/{credentials['accountId']}/projects/{project_id}/")
 
 
 def connected_environments(credentials: dict, project_id: int) -> dict:
     if type(project_id) is not int or project_id < 1:
         raise DbtCloudError("Invalid dbt project ID")
-    return connection_request(credentials, f"/api/v2/accounts/{credentials['accountId']}/environments/?project_id={project_id}")
+    return connection_request(credentials, f"/api/v3/accounts/{credentials['accountId']}/projects/{project_id}/environments/")
 
 
-def connected_repository(credentials: dict, repository_id: int) -> dict:
+def connected_repository(credentials: dict, project_id: int, repository_id: int) -> dict:
+    if type(project_id) is not int or project_id < 1:
+        raise DbtCloudError("Invalid dbt project ID")
     if type(repository_id) is not int or repository_id < 1:
         raise DbtCloudError("Invalid dbt repository ID")
-    return connection_request(credentials, f"/api/v2/accounts/{credentials['accountId']}/repositories/{repository_id}/")
+    return connection_request(
+        credentials, f"/api/v3/accounts/{credentials['accountId']}/projects/{project_id}/repositories/{repository_id}/"
+    )

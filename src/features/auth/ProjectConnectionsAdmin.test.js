@@ -13,7 +13,7 @@ test('Team A/C members configure dbt inside workspace without a lead code',()=>{
   assert.match(workspace,/Team Lead: Connect dbt Project/)
   assert.match(workspace,/ProjectConnectionsAdmin role=\{role\}/)
   assert.match(admin,/dbt Cloud account ID/)
-  assert.match(admin,/dbt Cloud service token/)
+  assert.match(admin,/dbt Cloud API token/)
   assert.match(admin,/dbt Cloud API host/)
   assert.doesNotMatch(backend,/X-Portal-Lead-Key/)
   assert.match(backend,/local_onboarding_request_allowed/)
