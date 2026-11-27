@@ -1,4 +1,4 @@
-# Install dbt Core and the PostgreSQL adapter used by federated-semantic-poc CI.
+# Install dbt Core and the PostgreSQL adapter used for the portal-managed project.
 dbt-core==1.12.6
 dbt-postgres==1.11.0
 PyYAML>=6,<7
