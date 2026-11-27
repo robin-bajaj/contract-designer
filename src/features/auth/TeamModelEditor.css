@@ -69,3 +69,34 @@
   .team-yaml-preview-header{padding:12px}
   .team-yaml-preview pre{font-size:11px}
 }
+
+/* Match the denser CDO editor without reducing input hit targets below 32px. */
+.team-editor{padding:20px 22px 48px}
+.team-editor-heading h2{font-size:20px;margin:4px 0}
+.team-editor-heading p{font-size:12px;line-height:1.5}
+.team-editor-form{margin:16px auto}
+.team-editor-fields{gap:12px}
+.team-editor-fields>section{padding:16px 18px;border-radius:8px}
+.team-editor-fields h3{font-size:15px;margin:0 0 12px}
+.team-editor-fields h4{font-size:13px;margin:16px 0 9px}
+.team-editor-fields label{font-size:11px;margin:9px 0;gap:5px}
+.team-editor-fields input:not([type=checkbox]),
+.team-editor-fields select{padding:7px 9px;min-height:34px;font-size:12px}
+.team-editor-fields textarea{padding:9px;font-size:12px}
+.team-editor-fields .team-editor-note{font-size:11px}
+.team-editor-fields .team-edit-table th{padding:8px;font-size:10px}
+.team-editor-fields .team-edit-table td{padding:5px;font-size:11px}
+.team-editor-fields .team-editor-section-heading{gap:8px}
+.team-editor-fields .team-editor-section-heading button{padding:7px 10px;font-size:11px}
+.team-yaml-preview-header{padding:11px 12px;gap:8px}
+.team-yaml-preview pre{padding:12px 14px;font-size:11px;line-height:1.55}
+@media(min-width:1320px){
+  .team-editor-split-layout{gap:14px}
+  .team-editor-split-layout>.team-yaml-preview{
+    height:min(68dvh,690px);min-height:340px;
+  }
+}
+@media(max-width:720px){
+  .team-editor{padding:16px}
+  .team-editor-fields>section{padding:13px}
+}

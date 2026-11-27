@@ -179,3 +179,80 @@
     max-height:none;
   }
 }
+
+/* Compact authoring density: keep the canvas untouched. */
+.main-content:has(.editor-split-layout){padding:18px 22px 42px}
+.main-content:has(.editor-split-layout) .editor-actions{margin-bottom:10px;align-items:center}
+.main-content:has(.editor-split-layout) .editor-actions button{
+  padding:7px 11px;min-height:34px;font-size:12px;
+}
+.main-content:has(.editor-split-layout) .github-publish-panel{
+  margin:10px 0 15px;padding:12px 15px;border-radius:8px;gap:7px;
+}
+.main-content:has(.editor-split-layout) .github-publish-panel strong{font-size:12px}
+.main-content:has(.editor-split-layout) .github-publish-panel .muted{
+  font-size:11px;line-height:1.45;margin:4px 0;
+}
+.main-content:has(.editor-split-layout) .github-publish-controls input{
+  padding:7px 10px;font-size:12px;min-height:34px;
+}
+.main-content:has(.editor-split-layout) .github-publish-controls button{
+  padding:7px 11px;font-size:12px;min-height:34px;
+}
+.editor-split-layout .editor-panel{padding:18px 20px;border-width:1px;border-radius:7px}
+.editor-split-layout .editor-intro .eyebrow{
+  display:block;font-size:18px;line-height:1.25;letter-spacing:.2px;
+}
+.editor-split-layout .editor-intro p{font-size:12px;margin:5px 0 14px;line-height:1.45}
+.editor-split-layout .section-title{
+  font-size:14px;line-height:1.4;border-bottom-width:1px;
+  margin:18px 0 10px;padding-bottom:6px;
+}
+.editor-split-layout .subtitle{font-size:11px}
+.editor-split-layout .form-grid{gap:12px}
+.editor-split-layout .form-grid label,.editor-split-layout .full-field{
+  font-size:12px;gap:5px;
+}
+.editor-split-layout .form-grid input,
+.editor-split-layout .form-grid select,
+.editor-split-layout .full-field input{height:34px;padding:6px 9px;font-size:12px}
+.editor-split-layout .full-field{margin-top:11px}
+.editor-split-layout .muted{font-size:11px;margin:6px 0;line-height:1.5}
+.editor-split-layout .table-scroll{margin-top:8px;border-width:1px}
+.editor-split-layout .table-scroll table{min-width:550px}
+.editor-split-layout .metric-table table{min-width:850px}
+.editor-split-layout .table-scroll th{padding:8px;font-size:11px}
+.editor-split-layout .table-scroll td{padding:5px}
+.editor-split-layout .table-scroll input,
+.editor-split-layout .table-scroll select{
+  height:33px;min-width:85px;padding:5px 7px;font-size:11px;
+}
+.editor-split-layout .table-scroll td:first-child input{
+  font-family:ui-monospace,SFMono-Regular,Consolas,Monaco,monospace;
+}
+.editor-split-layout .table-scroll .remove{padding:6px;min-width:30px;min-height:30px}
+.editor-split-layout .metric-table td:last-child .remove{min-width:30px;min-height:30px}
+.editor-split-layout .add-button{margin-top:8px;padding:7px 11px;font-size:12px}
+.editor-split-layout .check-grid{gap:7px}
+.editor-split-layout .check-field{padding:8px 10px;font-size:12px}
+.editor-split-layout .validation{margin-top:15px;padding:11px;font-size:12px}
+.editor-split-layout .yaml-side-panel .yaml-head{padding:10px 12px;gap:8px}
+.editor-split-layout .yaml-side-panel .yaml-file-label strong{font-size:12px}
+.editor-split-layout .yaml-side-panel .yaml-file-label small{font-size:10px}
+.editor-split-layout .yaml-side-panel .yaml-buttons{gap:5px}
+.editor-split-layout .yaml-side-panel .yaml-buttons .outline{
+  padding:6px 8px;font-size:11px;min-height:30px;
+}
+.editor-split-layout .yaml-side-panel pre{
+  padding:12px 14px;font-size:11px;line-height:1.55;
+}
+@container (min-width: 1040px){
+  .editor-split-layout.has-yaml{gap:14px}
+  .editor-split-layout.has-yaml>.yaml-side-panel{
+    height:min(68dvh,690px);min-height:340px;
+  }
+}
+@media (max-width:800px){
+  .main-content:has(.editor-split-layout){padding:15px}
+  .editor-split-layout .editor-panel{padding:15px}
+}
