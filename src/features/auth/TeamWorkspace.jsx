@@ -189,7 +189,7 @@ export default function TeamWorkspace({ role }) {
           <p>Existing definitions are read from the connected repository. Database credentials stay in dbt Cloud. These previews are read-only; validation and remote editing integration will follow.</p>
           <h4>Staging models</h4>
           {connectedCatalog.sources.length ? <div className="team-connected-source-list">
-            {connectedCatalog.sources.map(name=><span key={name} className="team-connected-source">{name}</span>)}
+            {(connectedCatalog.sourceFiles||[]).map(file=><button type="button" key={file.path} className="team-connected-source" disabled={openedFileLoading} onClick={()=>openConnectedFile(file.path)} title="View source SQL">{file.name}</button>)}
           </div> : <p>No staging SQL files found in this team's model folder.</p>}
           <h4>Semantic models from Git</h4>
           {connectedCatalog.models.length ? <div className="team-connected-model-list">
