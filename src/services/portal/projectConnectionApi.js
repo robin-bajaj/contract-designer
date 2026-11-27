@@ -30,3 +30,8 @@ export const teamConnectedModels=(role,fetchImpl=fetch)=>
   call(`/api/team-models/connected?role=${encodeURIComponent(role)}`,{fetchImpl})
 export const teamConnectedFile=(role,path,fetchImpl=fetch)=>
   call(`/api/team-models/file?role=${encodeURIComponent(role)}&path=${encodeURIComponent(path)}`,{fetchImpl})
+
+export const leadGithubStatus=(role,fetchImpl=fetch)=>
+  call(`/api/lead/github/status?role=${encodeURIComponent(role)}`,{fetchImpl})
+export const leadVerifyGithub=(role,fetchImpl=fetch)=>
+  call('/api/lead/github/verify',{data:{role},fetchImpl})
