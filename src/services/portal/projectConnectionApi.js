@@ -1,16 +1,18 @@
-/** Backend-owned dbt integrations. Tokens stay on Python server.
- * Admin unlock key is held only in React component memory for this session.
+/** Team Lead-supplied dbt details are sent only to the local Python backend.
+ * The lead's access code and service token are kept in component memory,
+ * never persisted to browser storage or placed in a query string.
  */
-async function call(url,{method='GET',data=null,adminKey=null,fetchImpl=fetch}={}) {
+async function call(url,{data=null,leadKey=null,fetchImpl=fetch}={}) {
   let response
   try {
     response=await fetchImpl(url,{
-      method,
+      method:data!==null?'POST':'GET',
       headers:{
-        ...(adminKey!==null?{'X-Portal-Admin-Key':adminKey}:{}),
+        ...(leadKey!==null?{'X-Portal-Lead-Key':leadKey}:{}),
         ...(data!==null?{'Content-Type':'application/json'}:{}),
       },
       ...(data!==null?{body:JSON.stringify(data)}:{}),
+      cache:'no-store',
     })
   } catch {
     throw Error('The portal backend is unavailable.')
@@ -19,12 +21,13 @@ async function call(url,{method='GET',data=null,adminKey=null,fetchImpl=fetch}={
   if(!response.ok || !result) throw Error(result?.error||`Backend HTTP ${response.status}`)
   return result
 }
-export const adminProjects=(key,fetchImpl=fetch)=>
-  call('/api/admin/project-connections/projects',{adminKey:key,fetchImpl})
-export const adminProjectPreview=(key,id,fetchImpl=fetch)=>
-  call(`/api/admin/project-connections/preview?projectId=${encodeURIComponent(id)}`,{adminKey:key,fetchImpl})
-export const adminAssignProject=(key,role,projectId,environmentId,fetchImpl=fetch)=>
-  call('/api/admin/project-connections',{method:'POST',data:{role,projectId,environmentId},adminKey:key,fetchImpl})
+export const leadDiscoverProjects=(leadKey,details,fetchImpl=fetch)=>
+  call('/api/lead/dbt/projects',{data:details,leadKey,fetchImpl})
+export const leadPreviewProject=(leadKey,details,fetchImpl=fetch)=>
+  call('/api/lead/dbt/preview',{data:details,leadKey,fetchImpl})
+export const leadConnectProject=(leadKey,details,fetchImpl=fetch)=>
+  call('/api/lead/dbt/connect',{data:details,leadKey,fetchImpl})
+
 export const teamConnectedModels=(role,fetchImpl=fetch)=>
   call(`/api/team-models/connected?role=${encodeURIComponent(role)}`,{fetchImpl})
 export const teamConnectedFile=(role,path,fetchImpl=fetch)=>
