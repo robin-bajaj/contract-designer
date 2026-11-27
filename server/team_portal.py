@@ -49,11 +49,16 @@ def connect():
         source_mode TEXT NOT NULL,
         source_sql TEXT,
         yaml_text TEXT NOT NULL,
+        draft_data TEXT,
         validated_digest TEXT,
         compiled_yaml TEXT,
         published_at TEXT,
         updated_at TEXT NOT NULL
     )""")
+    # Existing POC databases created before the draft-data feature are migrated.
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(drafts)")}
+    if "draft_data" not in columns:
+        conn.execute("ALTER TABLE drafts ADD COLUMN draft_data TEXT")
     return conn
 
 
@@ -107,10 +112,15 @@ def public(row: sqlite3.Row) -> dict:
         "id": row["id"], "role": row["role"], "sourceModel": row["source_model"],
         "semanticName": row["semantic_name"], "sourceMode": row["source_mode"],
         "sourceSql": row["source_sql"], "yamlText": row["yaml_text"],
+        "draftData": json.loads(row["draft_data"] or "{}"),
         "publishedAt": row["published_at"], "updatedAt": row["updated_at"],
     }
-    item["status"] = ("published" if row["published_at"]
-                      else "validated" if row["validated_digest"] == digest(validate_input(item))
+    try:
+        current = digest(validate_input(item))
+    except PortalError:
+        current = None
+    item["status"] = ("published" if row["published_at"] and row["validated_digest"] == current
+                      else "validated" if current is not None and row["validated_digest"] == current
                       else "draft")
     return item
 
@@ -137,7 +147,28 @@ def load_draft(draft_id: str) -> dict:
 
 
 def save_draft(payload: object) -> dict:
-    data = validate_input(payload)
+    if not isinstance(payload, dict) or payload.get("role") not in TEAMS:
+        raise PortalError("Only Team A and Team C drafts are supported")
+    role = payload["role"]
+    data = {
+        "role": role,
+        "sourceModel": payload.get("sourceModel", ""),
+        "semanticName": payload.get("semanticName", ""),
+        "sourceMode": payload.get("sourceMode", "new"),
+        "sourceSql": payload.get("sourceSql"),
+        "yamlText": payload.get("yamlText", ""),
+    }
+    if any(not isinstance(data[k], str) or len(data[k]) > 150 for k in ("sourceModel", "semanticName")):
+        raise PortalError("Invalid or oversized model name")
+    if data["sourceMode"] not in ("new", "existing"):
+        raise PortalError("Invalid source mode")
+    if data["sourceSql"] is not None and (not isinstance(data["sourceSql"], str) or len(data["sourceSql"]) > MAX_SQL):
+        raise PortalError("Oversized SQL")
+    if not isinstance(data["yamlText"], str) or len(data["yamlText"]) > MAX_YAML:
+        raise PortalError("Oversized YAML")
+    draft_data = payload.get("draftData") or {}
+    if not isinstance(draft_data, dict) or len(json.dumps(draft_data)) > 100_000:
+        raise PortalError("Invalid or oversized editor draft")
     requested_id = payload.get("id") if isinstance(payload, dict) else None
     if requested_id:
         old = load_draft(requested_id)
@@ -145,24 +176,30 @@ def save_draft(payload: object) -> dict:
             raise PortalError("Cannot edit another team's draft", 403)
     draft_id = requested_id or str(uuid.uuid4())
     before = load_draft(draft_id) if requested_id else None
-    previous_digest = digest(validate_input(before)) if before else None
-    new_digest = digest(data)
+    try:
+        previous_digest = digest(validate_input(before)) if before else None
+    except PortalError:
+        previous_digest = None
+    try:
+        new_digest = digest(validate_input(data))
+    except PortalError:
+        new_digest = None
     with connect() as conn:
         if before:
             # A content edit always invalidates the previous dbt validation.
             conn.execute("""UPDATE drafts SET source_model=?,semantic_name=?,source_mode=?,
-                source_sql=?,yaml_text=?,validated_digest=CASE WHEN ?=? THEN validated_digest ELSE NULL END,
+                source_sql=?,yaml_text=?,draft_data=?,validated_digest=CASE WHEN ?=? THEN validated_digest ELSE NULL END,
                 compiled_yaml=CASE WHEN ?=? THEN compiled_yaml ELSE NULL END,
                 published_at=CASE WHEN ?=? THEN published_at ELSE NULL END,updated_at=? WHERE id=?""",
                 (data["sourceModel"], data["semanticName"], data["sourceMode"], data["sourceSql"],
-                 data["yamlText"], previous_digest, new_digest, previous_digest, new_digest,
+                 data["yamlText"], json.dumps(draft_data), previous_digest, new_digest, previous_digest, new_digest,
                  previous_digest, new_digest, now(), draft_id))
         else:
             conn.execute("""INSERT INTO drafts
-                (id,role,source_model,semantic_name,source_mode,source_sql,yaml_text,updated_at)
-                VALUES (?,?,?,?,?,?,?,?)""",
+                (id,role,source_model,semantic_name,source_mode,source_sql,yaml_text,draft_data,updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?)""",
                 (draft_id, data["role"], data["sourceModel"], data["semanticName"],
-                 data["sourceMode"], data["sourceSql"], data["yamlText"], now()))
+                 data["sourceMode"], data["sourceSql"], data["yamlText"], json.dumps(draft_data), now()))
     return load_draft(draft_id)
 
 
