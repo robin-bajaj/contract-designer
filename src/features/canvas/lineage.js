@@ -51,7 +51,15 @@ export function lineageEdges(contracts, positions) {
     const parent = findParent(byKey, c)
     if (!parent || !positions[parent.id] || !positions[c.id]) return []
     const a = positions[parent.id], b = positions[c.id]
+    // Each edge runs directly from its actual parent's lower anchor to its
+    // child's upper anchor. Avoid the horizontal bus that can appear detached
+    // after saved card-position overrides or when two parent versions coexist.
+    const startX = a.x + NODE_WIDTH / 2
+    const startY = a.y + NODE_HEIGHT
+    const endX = b.x + NODE_WIDTH / 2
+    const endY = b.y - 7 // leave a small gap for the arrowhead
+    const bend = Math.max(24, Math.abs(endY - startY) / 2)
     return [{ id: `${parent.id}->${c.id}`, from: parent.id, to: c.id,
-      path: `M ${a.x + NODE_WIDTH / 2} ${a.y + NODE_HEIGHT} V ${a.y + NODE_HEIGHT + 32} H ${b.x + NODE_WIDTH / 2} V ${b.y - 7}` }]
+      path: `M ${startX} ${startY} C ${startX} ${startY + bend} ${endX} ${endY - bend} ${endX} ${endY}` }]
   })
 }
