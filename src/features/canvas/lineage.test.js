@@ -65,10 +65,10 @@ test('Excalidraw-style: child to the right attaches right-to-left, not bottom-to
   const arrow=boundArrowBetween(a,b)
   assert.equal(arrow.fromSide,'right')
   assert.equal(arrow.toSide,'left')
-  near(arrow.from.x,a.right+3)
-  near(arrow.to.x,b.left-9)
-  assert.ok(arrow.from.y>a.top && arrow.from.y<a.bottom)
-  assert.ok(arrow.to.y>b.top && arrow.to.y<b.bottom)
+  near(arrow.start.x,a.right+3)
+  near(arrow.end.x,b.left-9)
+  assert.ok(arrow.start.y>a.top && arrow.start.y<a.bottom)
+  assert.ok(arrow.end.y>b.top && arrow.end.y<b.bottom)
   assert.match(arrow.path,/^M .* L .*$/)
   assert.doesNotMatch(arrow.path,/ C | H | V /)
 })
@@ -78,10 +78,10 @@ test('child directly below parent uses bottom-to-top anchors',()=>{
   const arrow=boundArrowBetween(a,b)
   assert.equal(arrow.fromSide,'bottom')
   assert.equal(arrow.toSide,'top')
-  near(arrow.from.x,401)
-  near(arrow.from.y,a.bottom+3)
-  near(arrow.to.x,401)
-  near(arrow.to.y,b.top-9)
+  near(arrow.start.x,401)
+  near(arrow.start.y,a.bottom+3)
+  near(arrow.end.x,401)
+  near(arrow.end.y,b.top-9)
 })
 
 test('child to left or above dynamically switches attachment edges',()=>{
@@ -101,8 +101,8 @@ test('diagonal attachments touch actual boundaries, not fixed card centers',()=>
   const arrow=boundArrowBetween(a,b)
   assert.equal(arrow.fromSide,'right')
   assert.equal(arrow.toSide,'left')
-  assert.ok(arrow.from.y>175,'source anchor should shift toward child on edge')
-  assert.ok(arrow.to.y<395,'target anchor should shift toward source on edge')
+  assert.ok(arrow.start.y>175,'source anchor should shift toward child on edge')
+  assert.ok(arrow.end.y<395,'target anchor should shift toward source on edge')
 })
 
 test('arrows use on-screen DOM rectangles after pan and zoom',()=>{
@@ -123,10 +123,10 @@ test('arrows use on-screen DOM rectangles after pan and zoom',()=>{
   assert.equal(edges[0].to,'child')
   assert.equal(edges[0].fromSide,'right')
   assert.equal(edges[0].toSide,'left')
-  near(edges[0].from.x,530-300+303+3)
-  near(edges[0].to.x,955-300-9)
+  near(edges[0].start.x,530-300+303+3)
+  near(edges[0].end.x,955-300-9)
   // Coordinates are viewport-local, not absolute clientX/clientY.
-  assert.ok(edges[0].from.y<800-100)
+  assert.ok(edges[0].start.y<800-100)
 })
 
 test('dragging a parent changes its endpoint immediately; no stale cached path',()=>{
@@ -137,7 +137,7 @@ test('dragging a parent changes its endpoint immediately; no stale cached path',
   const viewport={left:0,top:0}
   const boxes={root:rect(20,50),child:rect(500,280)}
   const before=lineageEdgesFromRects(contracts,boxes,viewport)[0]
-  boxes.root=rect(700,350)
+  boxes.root=rect(800,350)
   const after=lineageEdgesFromRects(contracts,boxes,viewport)[0]
   assert.notEqual(after.path,before.path)
   assert.equal(before.fromSide,'right')
