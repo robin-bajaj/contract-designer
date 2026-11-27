@@ -93,3 +93,22 @@
 .dbt-tree-file>span:nth-child(2){overflow-wrap:anywhere}
 .dbt-tree-open{margin-left:auto;padding-right:12px;font-size:11px;color:#008f54;opacity:0}
 .dbt-tree-file:hover .dbt-tree-open,.dbt-tree-file:focus .dbt-tree-open{opacity:1}
+
+/* dbt Studio-like persistent source tree beside the workspace content */
+.dbt-studio-layout{display:grid;grid-template-columns:minmax(245px,300px) minmax(0,1fr);gap:20px;align-items:start}
+.dbt-studio-sidebar{position:sticky;top:12px;background:#fff;border:1px solid #dce9df;border-radius:9px;min-width:0;max-height:calc(100vh - 24px);display:flex;flex-direction:column;overflow:hidden}
+.dbt-studio-sidebar .dbt-explorer{border:0;margin:0;min-height:0;display:flex;flex-direction:column;flex:1}
+.dbt-studio-sidebar .dbt-explorer-tree{max-height:none;min-height:0;flex:1}
+.dbt-studio-sidebar .dbt-explorer-toolbar{gap:5px}
+.dbt-studio-sidebar .dbt-explorer-toolbar select{max-width:100px}
+.dbt-studio-sidebar .dbt-explorer-toolbar>span{width:100%;text-align:right}
+.dbt-sidebar-heading{display:flex;align-items:center;gap:9px;border-bottom:1px solid #e3efe7;padding:12px;background:#f6faf7;color:#2f6447}
+.dbt-sidebar-heading>div{flex:1;min-width:0;display:grid;gap:4px}
+.dbt-sidebar-heading strong{font-size:13px;overflow-wrap:anywhere}
+.dbt-sidebar-heading small{font-size:10px;color:#7d9685;overflow-wrap:anywhere}
+.dbt-sidebar-heading button{padding:5px}
+.dbt-studio-main{min-width:0}
+.dbt-studio-main .team-connected-project{margin-top:0}
+.dbt-backend-warning{font-size:11px;line-height:1.5;color:#8a6335;padding:10px;background:#fff9eb;margin:8px;border:1px solid #eadbb9;border-radius:5px}
+.dbt-backend-warning code{font-size:11px}
+@media(max-width:900px){.dbt-studio-layout{grid-template-columns:1fr}.dbt-studio-sidebar{position:static;max-height:340px}}
