@@ -99,7 +99,7 @@ def repository(repository_id: int) -> dict:
 # Team Lead onboarding uses credentials supplied through the portal on a
 # server-bound HTTPS request. No dbt token appears in a query string or in a
 # response. Allow only known dbt API hosts to avoid server-side request forgery.
-CELL_HOST = re.compile(r"^[a-z0-9-]+\\.(?:us[123]|eu[1234]|au[12]|jp1)\\.dbt\\.com$")
+CELL_HOST = re.compile(r"^[a-z0-9-]+\.(?:us[123]|eu[1234]|au[12]|jp1)\.dbt\.com$")
 LEGACY_HOSTS = {"cloud.getdbt.com", "emea.dbt.com", "au.dbt.com"}
 
 
