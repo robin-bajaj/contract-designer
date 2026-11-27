@@ -5,7 +5,7 @@ import {
   buildTeamModelDocument, toTeamModelYaml, teamModelPath,
 } from '../../domain/semantics/teamModelAuthoring.js'
 import { DATA_TYPES, SIMPLE_AGGREGATIONS } from '../../domain/contracts/dbtOptions.js'
-import { savePortalDraft, validatePortalDraft, publishPortalDraft } from '../../services/portal/teamPortalApi.js'
+import { savePortalDraft, validatePortalDraft, publishPortalDraft, centralCIStatus } from '../../services/portal/teamPortalApi.js'
 import LiveStagingStatus from './LiveStagingStatus.jsx'
 import './TeamModelEditor.css'
 
@@ -26,6 +26,18 @@ export default function TeamModelEditor({role,contracts,sourceModels,onBack,init
   const [error,setError]=useState('')
   const [validating,setValidating]=useState(false)
   const [validationResult,setValidationResult]=useState(null)
+  const [centralCI,setCentralCI]=useState(null)
+  const [centralCIError,setCentralCIError]=useState('')
+  const [loadingCentralCI,setLoadingCentralCI]=useState(false)
+  const refreshCentralCI=async()=>{
+    const number=saved?.prNumber||result?.prNumber
+    if(!number)return
+    setLoadingCentralCI(true)
+    setCentralCIError('')
+    try{setCentralCI(await centralCIStatus(role,number))}
+    catch(error){setCentralCIError(error.message)}
+    finally{setLoadingCentralCI(false)}
+  }
   const selectedAttrs=(draft.attributes||[]).filter(a=>a.selected)
   const expressions=[...new Set([...selectedAttrs.map(a=>a.name),...draft.columns.map(c=>c.name)].filter(Boolean))]
   const issues=useMemo(()=>validateTeamDraft(draft,role,contracts,sourceModels),[draft,role,contracts,sourceModels])
@@ -230,6 +242,22 @@ export default function TeamModelEditor({role,contracts,sourceModels,onBack,init
           <small>Validation checks model structure and references; it does not execute SQL or verify physical column types.</small>
         </div>}
         {saved?.id && <p className="team-validation-ok"><Save size={14}/> Draft saved to portal · {saved.status}{saved.prUrl && <> · <a href={saved.prUrl} target="_blank" rel="noopener noreferrer">GitHub PR #{saved.prNumber}</a></>}</p>}
+        {(saved?.prNumber||result?.prNumber) && <div className="team-editor-ci-status">
+          <button className="outline" type="button" disabled={loadingCentralCI} onClick={refreshCentralCI}>
+            {loadingCentralCI?'Checking CI…':'Refresh central CI status'}
+          </button>
+          {centralCIError && <p role="alert">{centralCIError}</p>}
+          {centralCI && (centralCI.length
+            ? centralCI.map(job=><div key={job.sha}>
+                <strong>Central CI — {job.status}</strong>
+                <small> · PR commit {job.sha.slice(0,12)}</small>
+                {job.result?.summary && <p>{job.result.summary}</p>}
+                {job.result?.error && <p role="alert">{job.result.error}</p>}
+                {job.result?.steps?.length>0 && <ul>{job.result.steps.map((step,i)=>
+                  <li key={i}>{step.name}: {step.status}</li>)}</ul>}
+              </div>)
+            : <p>No central validation job found yet. GitHub App installation and webhook delivery must be configured by the platform administrator.</p>)}
+        </div>}
         {error && <p className="team-editor-error" role="alert">{error}</p>}
         {result && <div className="team-editor-success"><CheckCircle2 size={15}/>
           <span>{result.message} <a href={result.prUrl} target="_blank" rel="noopener noreferrer">View PR #{result.prNumber} on GitHub</a>
