@@ -9,7 +9,8 @@ import './TeamModelEditor.css'
 
 const updateIndex=(items,index,patch)=>items.map((item,i)=>i===index?{...item,...patch}:item)
 const downloadYaml=(name,text)=>{
-  const url=URL.createObjectURL(new Blob([text],{type:'text/yaml'}))
+  const mime=name.endsWith('.sql')?'text/plain':'text/yaml'
+  const url=URL.createObjectURL(new Blob([text],{type:mime}))
   const el=document.createElement('a')
   el.href=url;el.download=name;el.click();URL.revokeObjectURL(url)
 }
@@ -55,7 +56,7 @@ export default function TeamModelEditor({role,contracts,sourceModels,onBack,onSa
         <label>Starting point
           <select value={draft.sourceMode} onChange={e=>{setDraft(current=>({...current,sourceMode:e.target.value,sourceModel:'',sourceSql:''}));setSavedMessage('')}}>
             <option value="new">Create a new SQL model</option>
-            <option value="existing">Use an existing team SQL model</option>
+            <option value="existing">Reuse a locally saved team SQL model</option>
           </select>
         </label>
         {draft.sourceMode==='existing' ? <label>Team source model
