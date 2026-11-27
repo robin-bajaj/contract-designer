@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import patch
 
 from server.managed_project import (
-    GROUPS_FILE, PROJECT_FILE, TEAM_DIRS, ManagedProjectError, ensure_project,
+    GROUPS_FILE, PROJECT_FILE, TEAM_DIRS, TIME_SPINE_YAML, TIME_SPINE_SQL, ManagedProjectError, ensure_project,
 )
 from server import team_portal
 
@@ -32,6 +32,8 @@ class ManagedProjectTests(unittest.TestCase):
             self.assertTrue((project / folder).is_dir(), folder)
         self.assertIn("lob_team_a", GROUPS_FILE)
         self.assertIn("lob_team_c", GROUPS_FILE)
+        self.assertEqual((project / "models/time_spine_daily.sql").read_text(), TIME_SPINE_SQL)
+        self.assertEqual((project / "models/time_spine.yml").read_text(), TIME_SPINE_YAML)
         self.assertNotIn("federated", str(project).lower())
 
     def test_repeated_starts_preserve_published_files_and_user_changes(self):
