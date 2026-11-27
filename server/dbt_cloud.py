@@ -27,7 +27,8 @@ def account() -> str:
     return number
 
 
-def request(method: str, resource: str, payload=None, *, opener=urlopen) -> dict:
+def request(method: str, resource: str, payload=None, *, opener=None) -> dict:
+    opener = opener or urlopen
     token = os.environ.get("DBT_CLOUD_TOKEN")
     if not token:
         raise DbtCloudError("DBT_CLOUD_TOKEN is not configured")
