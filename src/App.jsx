@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import yaml from 'js-yaml'
-import { CircleAlert, FolderTree, RotateCcw, Search, Upload, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CircleAlert, FolderTree, RotateCcw, Search, Upload, X } from 'lucide-react'
 import { toContractDocument, validateContract } from './domain/contracts/contracts.js'
 import ContractCanvas from './features/canvas/ContractCanvas.jsx'
 import ContractExplorer from './features/explorer/ContractExplorer.jsx'
@@ -18,6 +18,7 @@ function App() {
   const [draftContract, setDraftContract] = useState(null)
   const [activeId, setActiveId] = useState(null)
   const [search, setSearch] = useState('')
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [view, setView] = useState('canvas')
   const [showYaml, setShowYaml] = useState(true)
   const [notice, setNotice] = useState('')
@@ -97,23 +98,52 @@ function App() {
     } catch(err) { setNotice(`Import failed: ${err.message}`) }
     e.target.value = ''
   }
+  useEffect(() => {
+    const onEscape = event => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return
+      // Leave text editing intact; first Escape releases focus.
+      if (event.target instanceof HTMLElement &&
+          (event.target.matches('input, textarea, select') || event.target.isContentEditable)) {
+        event.target.blur()
+        return
+      }
+      if (view === 'edit') {
+        setView('canvas')
+        setValidation(null)
+      } else if (notice) {
+        setNotice('')
+      }
+    }
+    window.addEventListener('keydown', onEscape)
+    return () => window.removeEventListener('keydown', onEscape)
+  }, [view, notice])
   const cards = filtered
   return <div className="app-shell">
-    <div className="workspace">
-      <aside className="sidebar">
-        <div className="section-label">MY CONTRACTS</div>
+    <div className={`workspace ${sidebarCollapsed ? 'workspace-sidebar-collapsed' : ''}`}>
+      <aside className="sidebar" aria-label="CDO contract explorer">
+        <div className="sidebar-toggle-row">
+          {!sidebarCollapsed && <div className="section-label">MY CONTRACTS</div>}
+          <button type="button" className="sidebar-toggle icon-quiet"
+            aria-label={sidebarCollapsed ? 'Expand contract explorer' : 'Collapse contract explorer'}
+            aria-expanded={!sidebarCollapsed} title={sidebarCollapsed ? 'Expand left panel' : 'Collapse left panel'}
+            onClick={() => setSidebarCollapsed(value => !value)}>
+            {sidebarCollapsed ? <ChevronRight size={19}/> : <ChevronLeft size={19}/>}
+          </button>
+        </div>
+        {!sidebarCollapsed && <>
         <div className="search"><Search size={17}/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search contracts..."/></div>
         <div className="folder-label"><FolderTree size={17}/> My Contracts</div>
         <button className="outline stretch" disabled={syncingRegistry} onClick={() => syncGitHub(githubToken)}><RotateCcw size={15}/>{syncingRegistry ? "Syncing GitHub..." : "Sync from GitHub"}</button>
         {registryStatus && <p className="registry-sync-status" role="status">{registryStatus}</p>}
         <ContractExplorer contracts={contracts} search={search} activeId={activeId} onOpen={open} onRemove={null} onAddChild={parent => addContract(true, parent)}/>
         <div className="sidebar-bottom"><button className="outline stretch" onClick={() => importRef.current?.click()}><Upload size={15}/> Import contract YAML</button><input ref={importRef} accept=".yml,.yaml,text/yaml" type="file" hidden onChange={importContract}/><p>Only approved contracts on governance GitHub main appear here. Unpublished work remains in the editor; export YAML as a backup before leaving or publish through a PR.</p></div>
+        </>}
       </aside>
       <main className="main-content">
         {notice && <div className="notice"><CircleAlert size={16}/><span>{notice}</span><button className="icon-quiet" onClick={() => setNotice('')}><X size={15}/></button></div>}
         {view === 'canvas' ? <>
           <div className="page-head"><h1>My Contracts</h1></div>
-          <p className="muted">Left-drag the canvas to pan or move contracts. Right-click blank space to create a standalone contract, or right-click a contract for options.</p>
+          <p className="muted">Left-drag the canvas to pan or move contracts. Right-click or double-click a contract for options; press Esc to dismiss.</p>
           <div className="graph-area"><ContractCanvas contracts={cards} onOpen={open} onCreateStandalone={() => addContract(false)} onCreateChild={parent => addContract(true, parent)}/></div>
         </> : active ? <ContractEditor
           active={active} contracts={contracts} selectedYaml={selectedYaml}
