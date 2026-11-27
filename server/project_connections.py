@@ -309,8 +309,12 @@ def _github(path: str) -> dict:
                 "SELECT github_installation_id FROM project_connections WHERE lower(repository)=lower(?) AND github_installation_id IS NOT NULL LIMIT 1",
                 (repo,)
             ).fetchone()
-        if row and github_app.configured():
-            token = github_app.token_for_installation(row["github_installation_id"])
+        if github_app.configured():
+            # During first-time onboarding there is no saved project connection yet.
+            # An already-installed App can still read the verified dbt-linked repo.
+            installation_id = (row["github_installation_id"] if row else
+                               github_app.installation_for_repo(repo))
+            token = github_app.token_for_installation(installation_id)
     # Public projects can be discovered without a token. For private GitHub
     # repositories, an administrator grants this backend read-only access.
     request = Request("https://api.github.com" + path, headers={
