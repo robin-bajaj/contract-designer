@@ -1,5 +1,6 @@
 # Contract Designer
 
+> **Current Team A/C mode (November 2026): LOCAL ONLY.** Team A and Team C no longer discover models from or publish to `robin-bajaj/federated-semantic-poc`. The Team workspaces allow creating and saving browser-local model drafts and downloading SQL/YAML. CDO contracts still load read-only from `cdo-semantic-governance`. The previously implemented GitHub publishing and dbt Core validation code remains dormant and is **not available in the Team UI** while the federated integration is paused. See [Local-only Team A/C mode](#local-only-team-ac-mode) below. Earlier sections about federated integration describe prior POC functionality, currently disabled.\n\n
 Visual editor for versioned logical CDO contracts. The authoritative catalog is `robin-bajaj/cdo-semantic-governance/contracts/` on `main`; unpublished edits never enter the catalog before review and merge.
 
 ## Getting started
@@ -268,3 +269,18 @@ The CDO editor and Team A/C semantic-model editor now use a denser, developer-fr
 **CDO child descriptions:** The governance registry currently enforces a strict `name/version/uses/include` child schema that does not allow a top-level `description`. The editor notes this limitation rather than generating child YAML that would fail the registry validator. Extending the child-contract schema should be a separate coordinated change in the governance repository.
 
 This is a UI-density and serialization fix; no changes to underlying CDO inheritance rules, dbt validation or team model publishing.
+
+## Local-only Team A/C mode
+
+Both Team A and Team C are intentionally **disconnected from the federated dbt repository** in the current POC. Their workspaces do not make API calls to discover `federated-semantic-poc` SQL or YAML, do not publish GitHub pull requests, and do not invoke the dbt Core validation API that clones that repository.
+
+The CDO workspace continues its existing governance GitHub integration. Team A/C can still read approved CDO contracts directly from `cdo-semantic-governance`, select a versioned contract for inheritance, edit staging SQL and semantic model definitions, preview YAML, and **Save local draft** in this browser.
+
+- **Create Semantic Model** starts a browser-local draft. In the editor, **Save local draft** persists even unfinished SQL or semantic definitions in role-specific browser storage.
+- The Team workspace lists local drafts so they can be reopened, edited, or deleted. Team A and Team C storage keys are independent.
+- **Download SQL** exports unsaved SQL. **Download YAML** is enabled after local structural checks pass; use these for durable backups.
+- Existing-source mode lists SQL staging models already saved locally by the same team. It does **not** discover or browse the federated repository.
+- Live staging/dbt Core parsing, cross-repo CI, GitHub PR publishing, and dbt Cloud execution are paused. Local structural checks are not dbt execution, and a saved draft is not a deployed model.
+- Browser local storage is tied to a browser/profile/origin and can be cleared. There is no shared-team persistence or authentication in this prototype.
+
+The earlier GitHub integration and dbt Core backend modules remain in the codebase for a deliberate future re-enable, but are not reached through the Team A/C UI. No changes to either `federated-semantic-poc` or `cdo-semantic-governance` are required by this mode.
