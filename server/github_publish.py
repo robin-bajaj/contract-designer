@@ -11,7 +11,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
-from . import project_connections, team_portal
+from . import project_connections, team_portal, team_ids
 
 _SHA = re.compile(r"^[0-9a-f]{40}$")
 _SEGMENT = re.compile(r"^[A-Za-z0-9_.-]+$")
@@ -71,7 +71,7 @@ def publish(draft: dict, compiled_yaml: str) -> dict:
     repo = connection["repository"]
     base_branch = connection["branch"]
     subdir = connection["subdirectory"]
-    team = team_portal.TEAMS[role]
+    team = team_ids.folder(role)
     if not _SEGMENT.fullmatch(base_branch) or not isinstance(subdir,str):
         raise team_portal.PortalError("Unsupported linked Git branch or project subdirectory", 422)
     paths = {
