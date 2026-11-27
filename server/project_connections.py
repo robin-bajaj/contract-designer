@@ -22,7 +22,7 @@ from urllib.request import Request, urlopen
 
 import yaml
 from cryptography.fernet import Fernet, InvalidToken
-from . import dbt_cloud, team_portal, github_app
+from . import dbt_cloud, team_portal
 
 TEAM_PREFIX = {"team-a": "team_a", "team-c": "team_c"}
 GITHUB_REPO = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
@@ -55,11 +55,12 @@ def connect():
         account_id INTEGER,
         api_host TEXT,
         token_ciphertext TEXT,
-        github_installation_id INTEGER
+        github_installation_id INTEGER,
+        github_token_ciphertext TEXT
     )""")
     # Forward-only migration for anyone who tried the original PR #32 branch.
     columns = {r[1] for r in conn.execute("PRAGMA table_info(project_connections)")}
-    for col, kind in (("account_id", "INTEGER"), ("api_host", "TEXT"), ("token_ciphertext", "TEXT"), ("github_installation_id", "INTEGER")):
+    for col, kind in (("account_id", "INTEGER"), ("api_host", "TEXT"), ("token_ciphertext", "TEXT"), ("github_installation_id", "INTEGER"), ("github_token_ciphertext", "TEXT")):
         if col not in columns:
             conn.execute(f"ALTER TABLE project_connections ADD COLUMN {col} {kind}")
     return conn
@@ -115,7 +116,7 @@ def _clean(row) -> dict | None:
         "subdirectory": row["subdirectory"],
         "accountId": row["account_id"], "apiHost": row["api_host"],
         "updatedAt": row["updated_at"],
-        "githubConnected": bool(row["github_installation_id"]),
+        "githubConnected": bool(row["github_token_ciphertext"]),
         # Never expose ciphertext, token, warehouse connection attributes.
     }
 
@@ -253,7 +254,8 @@ def assign(role: str, payload: dict) -> dict:
           subdirectory=excluded.subdirectory,updated_at=excluded.updated_at,
           account_id=excluded.account_id,api_host=excluded.api_host,
           token_ciphertext=excluded.token_ciphertext,
-          github_installation_id=CASE WHEN project_connections.repository=excluded.repository THEN project_connections.github_installation_id ELSE NULL END""", (
+          github_installation_id=CASE WHEN project_connections.repository=excluded.repository THEN project_connections.github_installation_id ELSE NULL END,
+          github_token_ciphertext=CASE WHEN project_connections.repository=excluded.repository THEN project_connections.github_token_ciphertext ELSE NULL END""", (
             role, preview["id"], preview["name"], environment_id, selected["name"],
             preview["repository"], preview["defaultBranch"], preview["subdirectory"],
             team_portal.now(), cred["accountId"], cred["host"], encrypted,
@@ -278,45 +280,15 @@ def github_connection_status(role: str) -> dict:
     require_team(role)
     connection = connection_for(role)
     return {
-        "configured": github_app.configured(),
-        "installUrl": github_app.installation_url(),
         "repository": connection["repository"] if connection else None,
         "connected": bool(connection and connection["githubConnected"]),
+        "method": "fine-grained-token",
     }
 
 
-def verify_github_connection(role: str) -> dict:
-    require_team(role)
-    connection = connection_for(role)
-    if connection is None:
-        raise team_portal.PortalError("Connect your existing dbt project first", 409)
-    if not github_app.configured():
-        raise team_portal.PortalError("Platform administrator must configure the GitHub App first", 503)
-    installation_id = github_app.verify_repository(connection["repository"])
-    with connect() as db:
-        db.execute("UPDATE project_connections SET github_installation_id=?,updated_at=? WHERE role=? AND repository=?",
-                   (installation_id, team_portal.now(), role, connection["repository"]))
-    return github_connection_status(role)
-
-
-def _github(path: str) -> dict:
-    token = os.environ.get("PORTAL_GITHUB_READ_TOKEN", "").strip()
-    match = re.match(r"^/repos/([^/?]+/[^/?]+)(?:/|$)", path)
-    if match:
-        repo = match.group(1)
-        with connect() as db:
-            row = db.execute(
-                "SELECT github_installation_id FROM project_connections WHERE lower(repository)=lower(?) AND github_installation_id IS NOT NULL LIMIT 1",
-                (repo,)
-            ).fetchone()
-        if github_app.configured():
-            # During first-time onboarding there is no saved project connection yet.
-            # An already-installed App can still read the verified dbt-linked repo.
-            installation_id = (row["github_installation_id"] if row else
-                               github_app.installation_for_repo(repo))
-            token = github_app.token_for_installation(installation_id)
-    # Public projects can be discovered without a token. For private GitHub
-    # repositories, an administrator grants this backend read-only access.
+def _github_request(path: str, token: str) -> dict:
+    if not path.startswith("/repos/") or any(character in path for character in ("\\", "\r", "\n", "#")):
+        raise team_portal.PortalError("Invalid GitHub repository API path", 400)
     request = Request("https://api.github.com" + path, headers={
         "Accept": "application/vnd.github+json",
         "User-Agent": "semantic-governance-portal",
@@ -327,13 +299,67 @@ def _github(path: str) -> dict:
         with urlopen(request, timeout=20) as response:
             return json.load(response)
     except HTTPError as exc:
-        if exc.code in (401, 403, 404):
-            raise team_portal.PortalError(
-                "Cannot read the connected GitHub repository. An administrator must grant repository read access.", 503
-            ) from exc
-        raise team_portal.PortalError(f"GitHub project inventory unavailable (HTTP {exc.code})", 502) from exc
+        if exc.code == 401:
+            raise team_portal.PortalError("GitHub rejected the token. Check that it is valid and not expired.", 401) from exc
+        if exc.code in (403, 429) and exc.headers.get("X-RateLimit-Remaining") == "0":
+            raise team_portal.PortalError("GitHub API rate limit reached; retry after the rate limit resets.", 429) from exc
+        if exc.code in (403, 404):
+            raise team_portal.PortalError("GitHub repository is not accessible with this token. Grant Contents: Read access to the linked repository.", 403) from exc
+        raise team_portal.PortalError(f"GitHub API request failed (HTTP {exc.code})", 502) from exc
     except (URLError, TimeoutError) as exc:
-        raise team_portal.PortalError("Unable to reach GitHub for project discovery", 503) from exc
+        raise team_portal.PortalError("Unable to reach GitHub", 503) from exc
+
+
+def connect_github_token(role: str, token: str) -> dict:
+    """Verify a fine-grained token against the dbt-linked repo before encrypting."""
+    require_team(role)
+    connection = connection_for(role)
+    if connection is None:
+        raise team_portal.PortalError("Connect your dbt project before connecting GitHub", 409)
+    if not isinstance(token, str) or not token.strip() or len(token) > 4096 or "\n" in token or "\r" in token:
+        raise team_portal.PortalError("Enter a valid GitHub fine-grained token", 400)
+    repo = connection["repository"]
+    if not GITHUB_REPO.fullmatch(repo):
+        raise team_portal.PortalError("Invalid linked GitHub repository", 422)
+    repo_path = "/repos/" + "/".join(quote(part, safe="") for part in repo.split("/"))
+    details = _github_request(repo_path, token.strip())
+    if details.get("full_name", "").lower() != repo.lower():
+        raise team_portal.PortalError("GitHub token has access to a different repository", 403)
+    branch = details.get("default_branch")
+    if not isinstance(branch, str) or not branch:
+        raise team_portal.PortalError("GitHub repository has no readable default branch", 422)
+    # Verify actual content-read access, not just metadata visibility.
+    _github_request(repo_path + "/git/trees/" + quote(branch, safe="") + "?recursive=1", token.strip())
+    ciphertext = _encrypt(token.strip())
+    with connect() as db:
+        db.execute(
+            "UPDATE project_connections SET github_token_ciphertext=?,github_installation_id=NULL,updated_at=? WHERE role=? AND repository=?",
+            (ciphertext, team_portal.now(), role, repo),
+        )
+    return github_connection_status(role)
+
+
+def disconnect_github_token(role: str) -> dict:
+    require_team(role)
+    with connect() as db:
+        db.execute("UPDATE project_connections SET github_token_ciphertext=NULL,updated_at=? WHERE role=?",
+                   (team_portal.now(), role))
+    return github_connection_status(role)
+
+
+def _github(path: str) -> dict:
+    # Only attach stored credentials to the repository verified through dbt.
+    match = re.match(r"^/repos/([^/?]+/[^/?]+)(?:/|$)", path)
+    token = ""
+    if match:
+        with connect() as db:
+            row = db.execute(
+                "SELECT github_token_ciphertext FROM project_connections WHERE lower(repository)=lower(?) AND github_token_ciphertext IS NOT NULL LIMIT 1",
+                (match.group(1),)
+            ).fetchone()
+        if row:
+            token = _decrypt(row["github_token_ciphertext"])
+    return _github_request(path, token)
 
 
 def _repo_read(repo: str) -> dict:
