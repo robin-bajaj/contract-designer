@@ -312,54 +312,6 @@ def _repo_read(repo: str) -> dict:
     return {"name": details["full_name"], "branch": branch}
 
 
-def project_preview(project_id: int) -> dict:
-    project, environments = _project_details(project_id)
-    repository = _connected_repo(project)
-    read = _repo_read(repository)
-    return {
-        "id": project_id, "name": project.get("name") or f"Project {project_id}",
-        "repository": read["name"], "defaultBranch": read["branch"],
-        "subdirectory": _subdirectory(project),
-        "environments": environments,
-        # dbt project/warehouse credentials are NEVER read or sent to React.
-        "connectionConfigured": bool(project.get("connection_id") or project.get("connection")),
-    }
-
-
-def assign(role: str, project_id: int, environment_id: int) -> dict:
-    if role not in TEAM_PREFIX:
-        raise team_portal.PortalError("Choose Team A or Team C", 400)
-    if type(project_id) is not int or project_id < 1:
-        raise team_portal.PortalError("Choose a valid dbt project", 400)
-    if type(environment_id) is not int or environment_id < 1:
-        raise team_portal.PortalError("Choose an environment from the selected dbt project", 400)
-    preview = project_preview(project_id)  # Recheck; do not trust browser claims
-    selected = next((item for item in preview["environments"] if item["id"] == environment_id), None)
-    if selected is None:
-        raise team_portal.PortalError("Selected environment does not belong to the dbt project", 422)
-    with connect() as db:
-        db.execute("""INSERT INTO project_connections
-          (role,project_id,project_name,environment_id,environment_name,repository,branch,subdirectory,updated_at)
-          VALUES (?,?,?,?,?,?,?,?,?)
-          ON CONFLICT(role) DO UPDATE SET
-          project_id=excluded.project_id,project_name=excluded.project_name,
-          environment_id=excluded.environment_id,environment_name=excluded.environment_name,
-          repository=excluded.repository,branch=excluded.branch,
-          subdirectory=excluded.subdirectory,updated_at=excluded.updated_at""", (
-            role, project_id, preview["name"], environment_id, selected["name"],
-            preview["repository"], preview["defaultBranch"], preview["subdirectory"],
-            team_portal.now(),
-        ))
-    return connection_for(role)
-
-
-def disconnect(role: str) -> None:
-    if role not in TEAM_PREFIX:
-        raise team_portal.PortalError("Unknown team", 400)
-    with connect() as db:
-        db.execute("DELETE FROM project_connections WHERE role=?", (role,))
-
-
 def _safe_path(row: dict, candidate: str) -> bool:
     if not isinstance(candidate, str) or any(
         segment in (".", "..", "") for segment in candidate.split("/")
