@@ -1,6 +1,6 @@
-import React,{useState} from 'react'
+import React,{useState,useEffect} from 'react'
 import {ArrowLeft,CheckCircle2,Cloud,Database,GitBranch,Link2,ShieldCheck} from 'lucide-react'
-import {leadDiscoverProjects,leadPreviewProject,leadConnectProject} from '../../services/portal/projectConnectionApi.js'
+import {leadDiscoverProjects,leadPreviewProject,leadConnectProject,leadGithubStatus,leadVerifyGithub} from '../../services/portal/projectConnectionApi.js'
 import './ProjectConnectionsAdmin.css'
 
 /** Local POC dbt Cloud onboarding, without a redundant Team Lead code.
@@ -18,6 +18,12 @@ export default function ProjectConnectionsAdmin({role,onBack}) {
   const [saved,setSaved]=useState(null)
   const [loading,setLoading]=useState(false)
   const [error,setError]=useState('')
+  const [github,setGithub]=useState(null)
+  const [githubError,setGithubError]=useState('')
+  const [githubLoading,setGithubLoading]=useState(false)
+  const refreshGithub=async()=>{try{setGithub(await leadGithubStatus(role));setGithubError('')}catch(e){setGithubError(e.message)}}
+  useEffect(()=>{refreshGithub()},[role])
+  const verifyGithub=async()=>{setGithubLoading(true);setGithubError('');try{setGithub(await leadVerifyGithub(role))}catch(e){setGithubError(e.message)}finally{setGithubLoading(false)}}
   const team=role==='team-a'?'Team A':'Team C'
   const details=()=>({role,apiHost:apiHost.trim().toLowerCase(),accountId:Number(accountId),serviceToken})
   const resetSelection=()=>{setProjects([]);setProjectId('');setPreview(null);setEnvironmentId('');setSaved(null);setError('')}
@@ -47,6 +53,7 @@ export default function ProjectConnectionsAdmin({role,onBack}) {
     try{
       const result=await leadConnectProject({...details(),projectId:Number(projectId),environmentId:Number(environmentId)})
       setSaved(result.connection)
+      await refreshGithub()
       setServiceToken('') // Never keep the token in the UI after success
       setProjects([])
       setPreview(null)
@@ -57,7 +64,7 @@ export default function ProjectConnectionsAdmin({role,onBack}) {
     <div className="project-connect-heading">
       <button type="button" className="outline" onClick={onBack}><ArrowLeft size={15}/> Back to {team} workspace</button>
       <div><span className="team-label">{team.toUpperCase()} · PROJECT ONBOARDING</span>
-        <h1>Connect existing dbt project</h1>
+        <h1>Manage project connections</h1>
         <p>A {team} Lead connects the team's existing dbt Cloud project once. Other team developers can then discover its models without entering database or GitHub credentials.</p>
       </div>
     </div>
@@ -120,6 +127,20 @@ export default function ProjectConnectionsAdmin({role,onBack}) {
       {error && <p className="project-connect-error" role="alert">{error}</p>}
       <small>Local development only: this screen has no sign-in or Team Lead authentication. Do not expose the portal publicly. Production requires company SSO and team permissions. Service tokens are encrypted server-side, and never saved to browser storage.</small>
     </section>}
+    <section className="project-connect-panel" aria-label="GitHub App connection">
+      <h2><GitBranch size={20}/> GitHub repository access</h2>
+      <p>Use the organization's GitHub App to authorize the repository linked to this team's dbt project. No GitHub personal access token is required.</p>
+      <div className="project-connect-summary">
+        <div><strong>Linked repository</strong><span>{github?.repository||'Connect a dbt project first'}</span></div>
+        <div><strong>GitHub App</strong><span>{github?.connected?'Connected':github?.configured?'Ready to authorize':'Not configured by platform administrator'}</span></div>
+      </div>
+      {github?.installUrl && github?.repository && !github.connected && <a className="primary github-app-install-link" href={github.installUrl} target="_blank" rel="noopener noreferrer">Install / authorize GitHub App</a>}
+      <button type="button" className="outline" disabled={githubLoading||!github?.configured||!github?.repository} onClick={verifyGithub}>
+        <CheckCircle2 size={15}/>{githubLoading?'Verifying on GitHub…':github?.connected?'Reverify GitHub access':'Verify GitHub connection'}
+      </button>
+      {githubError && <p className="project-connect-error" role="alert">{githubError}</p>}
+      <small>After authorizing the repository on GitHub, return here and verify. Only repository read permission is used for project browsing. PR publishing requires a separate permissions upgrade and is not enabled by this connection.</small>
+    </section>
     <p className="project-connect-footnote">This first milestone provides read-only discovery of existing SQL, YAML and CDO references. Remote editing, live database execution and PR publication are not yet connected. No warehouse password is requested.</p>
   </main>
 }
