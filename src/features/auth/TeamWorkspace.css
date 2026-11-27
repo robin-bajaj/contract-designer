@@ -112,3 +112,18 @@
 .dbt-backend-warning{font-size:11px;line-height:1.5;color:#8a6335;padding:10px;background:#fff9eb;margin:8px;border:1px solid #eadbb9;border-radius:5px}
 .dbt-backend-warning code{font-size:11px}
 @media(max-width:900px){.dbt-studio-layout{grid-template-columns:1fr}.dbt-studio-sidebar{position:static;max-height:340px}}
+
+/* Use the available browser width for the actual project workspace. */
+.team-dashboard{max-width:none;width:100%;box-sizing:border-box;padding:24px clamp(16px,2.5vw,48px) 44px}
+.dbt-studio-layout{grid-template-columns:minmax(260px,24%) minmax(0,1fr);gap:14px;min-height:calc(100vh - 255px)}
+.dbt-studio-sidebar{height:calc(100vh - 245px);min-height:540px;max-height:none}
+.dbt-studio-main .team-connected-project{min-height:calc(100vh - 290px);padding:20px}
+.team-connected-summary{grid-template-columns:repeat(4,minmax(0,1fr))}
+.team-connected-file pre{min-height:390px;max-height:calc(100vh - 380px);white-space:pre;overflow:auto}
+.team-editor-toolbar{display:flex;gap:14px;align-items:center;margin:14px 0}
+.team-editor-toolbar>span{font-size:12px;color:#7a8e81}
+.dbt-editor-placeholder{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:9px;min-height:360px;color:#879b8d;border:1px dashed #cfe2d4;background:#fbfdfb;border-radius:8px;margin-top:18px;text-align:center;padding:18px}
+.dbt-editor-placeholder strong{font-size:15px;color:#466d54}
+.dbt-editor-placeholder span{font-size:12px;max-width:340px}
+@media(max-width:1000px){.dbt-studio-layout{grid-template-columns:minmax(230px,30%) minmax(0,1fr)}.team-connected-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:780px){.dbt-studio-layout{grid-template-columns:1fr}.dbt-studio-sidebar{height:auto;min-height:0;max-height:380px}.dbt-studio-main .team-connected-project{min-height:350px}}

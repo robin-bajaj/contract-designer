@@ -194,7 +194,7 @@ export default function TeamWorkspace({ role }) {
   return <div className="team-page">
     <main className="team-dashboard">
       <div className="team-dashboard-title">
-        <div><span className="team-label">PORTAL-OWNED SEMANTIC MODELS</span><h1>{workspace?.label} Workspace</h1>
+        <div><span className="team-label">CONNECTED DBT PROJECT</span><h1>{workspace?.label} Workspace</h1>
           <p>{workspace?.description} · Create staging and semantic models, inherit CDO definitions, validate, and publish—all in one place.</p></div>
         <div className="team-dashboard-actions"><button type="button" className="outline" disabled={loading} onClick={()=>setConnecting(true)}><GitBranch size={15}/> Team Lead: Connect dbt Project</button>
         <button type="button" className="primary team-create-button" disabled={loading||Boolean(error)} onClick={()=>{setEditing(null);setCreating(true)}}><Plus size={15}/> Create Semantic Model</button>
@@ -202,7 +202,7 @@ export default function TeamWorkspace({ role }) {
           <RefreshCw size={15}/>{loading ? 'Loading...' : 'Refresh models'}
         </button></div>
       </div>
-      <div className="team-repository-line" role="status"><Database size={17}/><span><strong>{dbtStatus?.workspaceReady ? 'Model workspace ready' : 'Preparing model workspace'}</strong> · {dbtStatus?.validationReady ? 'Validation service available' : 'Validation service unavailable — contact the administrator'} · Approved CDO contracts available</span></div>
+
       <div className="dbt-studio-layout">
         <aside className="dbt-studio-sidebar" aria-label="dbt project files">
           <div className="dbt-sidebar-heading">
@@ -211,7 +211,7 @@ export default function TeamWorkspace({ role }) {
             <button type="button" className="outline" title="Refresh project files" onClick={()=>setGeneration(v=>v+1)}><RefreshCw size={15}/></button>
           </div>
           {!catalogLoading && connectedCatalog?.connection && !Array.isArray(connectedCatalog.files) &&
-            <p className="dbt-backend-warning">Your Python API is still running an older version. Restart <code>npm run dev:api</code> to discover the full repository. Showing the files already discovered.</p>}
+            <p className="dbt-backend-warning">Only {discoveredFiles.length} previously discovered files are available because the Python backend has not been restarted. Stop the backend process, restart <code>npm run dev:api</code>, then click Refresh models. Reloading the browser alone will not fix this.</p>}
           {connectedCatalog?.connection
             ? <ProjectFileTree paths={discoveredFiles} onOpen={openConnectedFile}
                 onCreate={()=>{setEditing(null);setCreating(true)}}/>
@@ -231,58 +231,20 @@ export default function TeamWorkspace({ role }) {
             <div><span>Discovered staging models</span><strong>{connectedCatalog.sources.length}</strong></div>
           </div>
           <p>Existing definitions are read from the connected repository. Database credentials stay in dbt Cloud. These previews are read-only; validation and remote editing integration will follow.</p>
-          <p>Browse and open files in the left-hand dbt project explorer. Files are read-only until GitHub editing is connected.</p>
-          <button type="button" className="primary team-create-button" onClick={()=>{setEditing(null);setCreating(true)}}><Plus size={15}/> Create model draft</button>
+          <p>Select a project file from the left sidebar to inspect its source.</p>
+          <div className="team-editor-toolbar"><button type="button" className="primary team-create-button" onClick={()=>{setEditing(null);setCreating(true)}}><Plus size={15}/> Create model draft</button><span>Read-only repository browser</span></div>
           {openedFileLoading && <p role="status">Opening file…</p>}
           {openedFileError && <p className="team-error" role="alert">{openedFileError}</p>}
+          {!openedFile && !openedFileLoading && <div className="dbt-editor-placeholder"><Database size={28}/><strong>No file selected</strong><span>Choose a SQL, YAML, or other supported source file from the left project explorer.</span></div>}
           {openedFile && <div className="team-connected-file">
             <div><strong>{openedFile.path}</strong><button className="outline" onClick={()=>setOpenedFile(null)} type="button">Close file</button></div>
             <pre aria-label="Connected project source">{openedFile.content}</pre>
           </div>}
-          <h4>Staging models</h4>
-          {connectedCatalog.sources.length ? <div className="team-connected-source-list">
-            {(connectedCatalog.sourceFiles||[]).map(file=><button type="button" key={file.path} className="team-connected-source" disabled={openedFileLoading} onClick={()=>openConnectedFile(file.path)} title="View source SQL">{file.name}</button>)}
-          </div> : <p>No staging SQL files found in this team's model folder.</p>}
-          <h4>Semantic models from Git</h4>
-          {connectedCatalog.models.length ? <div className="team-connected-model-list">
-            {connectedCatalog.models.map((model,index)=><div className="team-connected-model-row" key={model.file+'-'+index}>
-              <div><strong>{model.semanticName||model.sourceModel||model.file}</strong>
-                <small>{model.description||'No description'} · {model.sourceModel||'No source model'}{model.contract?.name ? ` · Inherits ${model.contract.name} v${model.contract.version}` : ''}</small></div>
-              <button type="button" className="outline" disabled={openedFileLoading} onClick={()=>openConnectedFile(model.file)}>View source YAML</button>
-            </div>)}
-          </div> : <p>No semantic YAML definitions found in this team's model folder.</p>}
-          {connectedCatalog.limited && <p>Showing the first 60 semantic YAML files. Ask the administrator to narrow the repository for larger projects.</p>}
-
         </>}
       </section>
       {loading && <div className="team-loading" role="status">Loading your models and approved contracts…</div>}
       {error && <div className="team-error" role="alert"><AlertCircle size={18}/>Unable to load your workspace: {error}. <button onClick={() => setGeneration(v => v + 1)}>Retry</button></div>}
-      {!loading && !error && !models.length && <div className="team-empty">No portal-authored models yet. Create a staging and semantic model to get started.</div>}
-      {!loading && !error && models.length > 0 && <section className="team-detail-section">
-        <h3>Portal models and drafts <span>{models.length}</span></h3>
-        {draftActionError && <p className="team-error" role="alert">{draftActionError}</p>}
-        <div className="team-draft-list">
-          {models.map(draft=><div className="team-draft-row" key={draft.id}>
-            <div><strong>{draft.semanticName||draft.sourceModel||'Untitled draft'}</strong>
-              <small>{draft.status} · staging: {draft.sourceModel||'not set'}</small>
-            </div>
-            <div className="team-dashboard-actions">
-              <button type="button" className="outline" onClick={()=>{setEditing(draft);setCreating(true)}}>Continue editing</button>
-              {draft.status !== 'published' && <button type="button" className="outline" onClick={()=>removeDraft(draft)}>Delete draft</button>}
-            </div>
-          </div>)}
-        </div>
-      </section>}
-      {!loading && !error && currentModel && <>
-        <div className="team-model-picker"><label htmlFor="team-model-select">Team semantic model</label>
-          <select id="team-model-select" value={currentModel.id} onChange={e => setSelectedId(e.target.value)}>
-            {presentations.map(model => <option key={model.id} value={model.id}>{model.semanticName} — {model.modelName}</option>)}
-          </select>
-          <span>{presentations.length} model{presentations.length===1?'':'s'} with semantic YAML</span>
-        </div>
-        <ModelDetails model={currentModel}/>
-      </>}
-      <p className="team-demo-note">Your drafts and published definitions stay in this portal workspace. Remote deployment is not enabled yet. Role selection remains a development prototype.</p>
+      <p className="team-demo-note">Viewing committed files from the linked Git repository. Changes to GitHub are not yet enabled.</p>
         </div>
       </div>
     </main>
