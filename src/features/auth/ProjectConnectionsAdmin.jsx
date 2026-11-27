@@ -1,14 +1,13 @@
 import React,{useState} from 'react'
-import {ArrowLeft,CheckCircle2,Cloud,Database,GitBranch,KeyRound,Link2,ShieldCheck} from 'lucide-react'
+import {ArrowLeft,CheckCircle2,Cloud,Database,GitBranch,Link2,ShieldCheck} from 'lucide-react'
 import {leadDiscoverProjects,leadPreviewProject,leadConnectProject} from '../../services/portal/projectConnectionApi.js'
 import './ProjectConnectionsAdmin.css'
 
-/** Team Lead onboarding. The role selector is only a demo; the Python backend
- * checks a separate team-scoped key before it ever calls dbt Cloud.
+/** Local POC dbt Cloud onboarding, without a redundant Team Lead code.
+ * The role selector is not authentication. Do not expose this app publicly.
  * The dbt token stays in component memory and is erased after successful save.
  */
 export default function ProjectConnectionsAdmin({role,onBack}) {
-  const [leadKey,setLeadKey]=useState('')
   const [apiHost,setApiHost]=useState('cloud.getdbt.com')
   const [accountId,setAccountId]=useState('')
   const [serviceToken,setServiceToken]=useState('')
@@ -26,7 +25,7 @@ export default function ProjectConnectionsAdmin({role,onBack}) {
   const discover=async(e)=>{
     e.preventDefault();setLoading(true);setError('');setSaved(null)
     try {
-      const result=await leadDiscoverProjects(leadKey,details())
+      const result=await leadDiscoverProjects(details())
       setProjects(result.projects||[])
       setProjectId('');setPreview(null);setEnvironmentId('')
     } catch(e){setError(e.message)}
@@ -37,7 +36,7 @@ export default function ProjectConnectionsAdmin({role,onBack}) {
     if(!value) return
     setLoading(true)
     try {
-      const result=await leadPreviewProject(leadKey,{...details(),projectId:Number(value)})
+      const result=await leadPreviewProject({...details(),projectId:Number(value)})
       setPreview(result.project)
       setEnvironmentId(result.project.environments?.[0]?.id ? String(result.project.environments[0].id) : '')
     }catch(e){setError(e.message)}
@@ -46,10 +45,9 @@ export default function ProjectConnectionsAdmin({role,onBack}) {
   const save=async()=>{
     setLoading(true);setError('')
     try{
-      const result=await leadConnectProject(leadKey,{...details(),projectId:Number(projectId),environmentId:Number(environmentId)})
+      const result=await leadConnectProject({...details(),projectId:Number(projectId),environmentId:Number(environmentId)})
       setSaved(result.connection)
       setServiceToken('') // Never keep the token in the UI after success
-      setLeadKey('')
       setProjects([])
       setPreview(null)
     }catch(e){setError(e.message)}
@@ -77,13 +75,10 @@ export default function ProjectConnectionsAdmin({role,onBack}) {
       <p>Project discovery is ready. The service token was encrypted on the server and cleared from this form.</p>
       <button type="button" className="primary" onClick={onBack}>View {team} models</button>
     </section> : <section className="project-connect-panel">
-      <h2><ShieldCheck size={20}/> {team} Lead verification</h2>
+      <h2><ShieldCheck size={20}/> {team} dbt Cloud connection</h2>
       <p>Connect your account once. Your database credentials remain in dbt Cloud. Use a scoped service token with permission to read your dbt projects, environments and Git configuration.</p>
       <form onSubmit={discover}>
         <div className="project-connect-fields">
-          <label><KeyRound size={15}/> {team} Lead access code
-            <input type="password" autoComplete="off" value={leadKey} onChange={e=>{setLeadKey(e.target.value);resetSelection()}} placeholder="Team Lead access code" required/>
-          </label>
           <label>dbt Cloud API host
             <input value={apiHost} onChange={e=>{setApiHost(e.target.value);resetSelection()}} placeholder="cloud.getdbt.com or account.us1.dbt.com" required autoComplete="off"/>
           </label>
@@ -94,7 +89,7 @@ export default function ProjectConnectionsAdmin({role,onBack}) {
             <input type="password" autoComplete="off" value={serviceToken} onChange={e=>{setServiceToken(e.target.value);resetSelection()}} placeholder="Paste scoped service token" required/>
           </label>
         </div>
-        <button className="primary" type="submit" disabled={loading||!leadKey||!accountId||!serviceToken||!apiHost}>
+        <button className="primary" type="submit" disabled={loading||!accountId||!serviceToken||!apiHost}>
           {loading?'Verifying with dbt Cloud…':'Discover dbt projects'}
         </button>
       </form>
@@ -123,7 +118,7 @@ export default function ProjectConnectionsAdmin({role,onBack}) {
         <Link2 size={15}/>{loading?'Saving connection…':`Connect to ${team}`}
       </button>}
       {error && <p className="project-connect-error" role="alert">{error}</p>}
-      <small>Only use this localhost development interface. The Team Lead access code is an interim authorization control; production requires company SSO and centralized secret management. The service token is stored encrypted separately from its local encryption key, never in browser storage.</small>
+      <small>Local development only: this screen has no sign-in or Team Lead authentication. Do not expose the portal publicly. Production requires company SSO and team permissions. Service tokens are encrypted server-side, and never saved to browser storage.</small>
     </section>}
     <p className="project-connect-footnote">This first milestone provides read-only discovery of existing SQL, YAML and CDO references. Remote editing, live database execution and PR publication are not yet connected. No warehouse password is requested.</p>
   </main>
