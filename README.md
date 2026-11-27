@@ -235,3 +235,15 @@ The toolbar now makes two distinct actions explicit:
 The contract canvas renders connectors in an SVG overlay aligned to the **visible canvas viewport**, using the actual `getBoundingClientRect()` of each parent and child card. This ensures connectors follow their cards when contracts are dragged, the diagram is panned or zoomed, or the browser/sidebar changes size. Parent lookup still respects the exact `uses.name` and `uses.version` contract.
 
 The toolbar is intentionally just **Zoom out (−)**, **zoom percentage**, **Zoom in (+)**, and **Center canvas at 100%**. The center action recenters and resets view scale while preserving all manually moved card coordinates. There is no layout-reset action in the toolbar; saved positions remain intact. Help labels are displayed immediately on hover/focus. 
+
+## Excalidraw-style bound arrows in the CDO canvas
+
+Each inherited contract relationship is now drawn as a **shape-bound straight arrow**, rather than a free-floating curve forced to leave the parent bottom and enter the child top. Endpoints are computed where a center-to-center ray meets each visible card's rectangle, with a small gap for the arrowhead. The attachment sides switch automatically (left/right/top/bottom) when either card is dragged to another side of its peer. For example:
+
+- Parent directly above child → bottom of parent to top of child
+- Parent to the left of child → right of parent to left of child
+- Parent to the right of child → left of parent to right of child
+
+The binding always uses the exact pinned `uses.name` and `uses.version`, never a similarly named newer contract. Coordinates come from the **actual rendered DOM rectangles** and are refreshed after drag, pan, zoom, viewport/card resize, and contract changes. This makes the relationship readable even if the user manually places contracts in arbitrary positions.
+
+This uses native SVG and our existing React canvas, **not an embedded Excalidraw editor**. Manually arranged positions are preserved and remain stored locally. The existing toolbar remains −, percentage, +, and Center at 100%.

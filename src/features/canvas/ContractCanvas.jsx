@@ -56,6 +56,7 @@ export default function ContractCanvas({ contracts, onOpen, onCreateStandalone, 
     if (!root || typeof ResizeObserver === 'undefined') return
     const observer = new ResizeObserver(measureEdges)
     observer.observe(root)
+    for (const card of cardRefs.current.values()) observer.observe(card)
     return () => observer.disconnect()
   }, [measureEdges])
 
@@ -187,7 +188,7 @@ export default function ContractCanvas({ contracts, onOpen, onCreateStandalone, 
 
         {contracts.map(c => <button key={c.id} ref={element => { if(element) cardRefs.current.set(c.id,element); else cardRefs.current.delete(c.id) }} type="button" className={`contract-card canvas-card ${c.uses ? 'child' : ''}`} style={{left: positions[c.id]?.x || 0, top: positions[c.id]?.y || 0}} onPointerDown={e => start(e, 'node', c.id)} onPointerMove={move} onPointerUp={end} onPointerCancel={end} onContextMenu={e => openContext(e, 'node', c)} onDoubleClick={e => openDoubleClick(e, c)} onKeyDown={e => openKeyboardContext(e, 'node', c)} aria-label={`Options for ${c.name} contract (double-click, right-click or Shift+F10)`}><span className="card-emoji" aria-hidden="true">{c.uses ? '🔗' : '📦'}</span><strong>{c.name}</strong><span className="card-badge">{c.uses ? 'CHILD CONTRACT' : 'STANDALONE CONTRACT'}</span><small>{c.uses ? `uses ${c.uses.name} v${c.uses.version}` : `v${c.version} · ${c.attributes.length} attributes, ${c.metrics.length} metrics`}</small></button>)}
       </div>
-      <svg className="canvas-connections-overlay" aria-hidden="true"><defs><marker id="lineage-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 Z" fill="#009c58"/></marker></defs>{edgePaths.map(e => <path key={e.id} d={e.path} fill="none" stroke="#009c58" strokeWidth="2.2" markerEnd="url(#lineage-arrow)"/>)}</svg>
+      <svg className="canvas-connections-overlay" aria-hidden="true"><defs><marker id="lineage-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 Z" fill="#009c58"/></marker></defs>{edgePaths.map(e => <path key={e.id} d={e.path} fill="none" stroke="#009c58" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" markerEnd="url(#lineage-arrow)"/>)}</svg>
       {!contracts.length && <p className="canvas-empty">Right-click anywhere to create your first standalone contract</p>}
       {contextMenu && <div className="canvas-context-menu" role="group" aria-label={contextMenu.kind === 'standalone' ? 'Canvas creation options' : 'Contract actions'} style={{ left: contextMenu.x, top: contextMenu.y }} onPointerDown={e => e.stopPropagation()} onPointerUp={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
         {contextMenu.kind === 'standalone' ? <button type="button" autoFocus onClick={() => {setContextMenu(null);onCreateStandalone()}}><Plus size={16}/> Create Standalone Contract</button> : <>
