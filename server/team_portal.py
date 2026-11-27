@@ -13,9 +13,10 @@ import sqlite3
 import uuid
 from datetime import datetime, timezone
 from .managed_project import ensure_project
+from . import team_ids
 
 IDENTIFIER = re.compile(r"^[a-z][a-z0-9_]*$")
-TEAMS = {"team-a": "team_a", "team-c": "team_c"}
+
 MAX_YAML = 80_000
 MAX_SQL = 40_000
 
@@ -75,8 +76,8 @@ def validate_input(payload: object) -> dict:
     if not isinstance(payload, dict):
         raise PortalError("Expected a JSON object")
     role = payload.get("role")
-    if role not in TEAMS:
-        raise PortalError("Only Team A and Team C can create team models")
+    if not team_ids.is_team(role):
+        raise PortalError("Only valid team roles can create team models")
     source = payload.get("sourceModel")
     semantic = payload.get("semanticName")
     if not all(isinstance(x, str) and IDENTIFIER.fullmatch(x) for x in (source, semantic)):
@@ -132,7 +133,7 @@ def public(row: sqlite3.Row) -> dict:
 
 
 def list_drafts(role: str) -> list[dict]:
-    if role not in TEAMS:
+    if not team_ids.is_team(role):
         raise PortalError("Unknown team")
     with connect() as conn:
         rows = conn.execute("SELECT * FROM drafts WHERE role = ? ORDER BY updated_at DESC",
@@ -153,7 +154,7 @@ def load_draft(draft_id: str) -> dict:
 
 
 def delete_draft(draft_id: str, role: str) -> None:
-    if role not in TEAMS:
+    if not team_ids.is_team(role):
         raise PortalError("Invalid team role", 403)
     draft = load_draft(draft_id)
     if draft["role"] != role:
@@ -166,8 +167,8 @@ def delete_draft(draft_id: str, role: str) -> None:
 
 
 def save_draft(payload: object) -> dict:
-    if not isinstance(payload, dict) or payload.get("role") not in TEAMS:
-        raise PortalError("Only Team A and Team C drafts are supported")
+    if not isinstance(payload, dict) or not team_ids.is_team(payload.get("role")):
+        raise PortalError("Only valid team roles can create drafts")
     role = payload["role"]
     data = {
         "role": role,
@@ -243,9 +244,9 @@ def mark_validated(draft_id: str, result: dict) -> dict:
 
 
 def source_models(role: str) -> list[str]:
-    if role not in TEAMS:
+    if not team_ids.is_team(role):
         raise PortalError("Unknown team")
-    team = TEAMS[role]
+    team = team_ids.folder(role)
     sources = set()
     project = project_path()
     if (project / "dbt_project.yml").is_file():
