@@ -66,6 +66,7 @@ export function validateTeamDraft(draft, role, registry, availableSourceModels) 
   const selectedAttrs = (draft.attributes || []).filter(x => x.selected)
   const selectedMetrics = (draft.inheritedMetrics || []).filter(x => x.selected)
   const inheritedNames = selectedAttrs.map(x => x.name)
+  if (draft.contract && !selectedAttrs.length) errors.push('Choose at least one CDO attribute to inherit.')
   for (const col of owned) if (inheritedNames.includes(col.name)) errors.push(`Team-owned column conflicts with inherited ${col.name}`)
   const availableExpressions = [...owned, ...selectedAttrs.map(x => ({ name:x.name, data_type:null }))]
   for (const metric of metrics) {
@@ -79,6 +80,7 @@ export function validateTeamDraft(draft, role, registry, availableSourceModels) 
   if (new Set(names).size !== names.length) errors.push('Team and inherited metric names must be unique.')
   for (const a of selectedAttrs) {
     if (a.alias && !SQL_IDENTIFIER.test(a.alias)) errors.push(`Invalid alias for ${a.name}`)
+    if (a.alias && !['primary','foreign','time','categorical'].includes(a.semanticType)) errors.push(`Alias for ${a.name} requires an entity or dimension annotation`)
     if (!['none','primary','foreign','time','categorical'].includes(a.semanticType)) errors.push(`Invalid semantic type for ${a.name}`)
     if (a.semanticType === 'time' && !['day','week','month','quarter','year'].includes(a.granularity)) errors.push(`Invalid time granularity for ${a.name}`)
   }
@@ -133,7 +135,7 @@ export function buildTeamModelDocument(draft, role, registry, availableSourceMod
           if (a.semanticType==='categorical') o.dimension={type:'categorical'}
           return o
         }),
-        metrics:selectedMetrics.map(m=>({name:m.name,...(m.alias?{alias:m.alias}:{})})),
+        metrics:selectedMetrics.map(m=>({name:m.name,alias:m.alias||m.name})),
       },
     }
   }
